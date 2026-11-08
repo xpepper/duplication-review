@@ -2,42 +2,64 @@
 name: duplication-review
 description: Clone evidence for a change. Use when reviewing a diff, PR or branch for missing abstractions, copy/paste, duplicated setup or "should this be extracted"; also when asked to run jscpd or a copy/paste detector.
 license: MIT
-compatibility: Needs git and Node (npx) to run jscpd.
-allowed-tools: Bash(git:*) Bash(npx:*) Bash(python3:*) Read
+disable-model-invocation: true
+compatibility: Needs git and Node (npx) to run jscpd; gh when given a PR number.
+allowed-tools: Bash(git *) Bash(gh pr view *) Bash(npx --yes jscpd@5 *) Read
 ---
 
 # Duplication review
 
-Find the clones a change is involved in, then judge each one as a missing abstraction or acceptable repetition.
+Duplicated code is often a hint of a missing abstraction. Find the clones a change is involved in, then ask of each group: what element, had it existed, would have made this change easy?
 
 ## Steps
 
-1. **Scope.** Resolve the diff base (`git merge-base HEAD origin/<default>`; a PR number gives its base via `gh pr view`). List changed files and their changed line ranges with `git diff -U0 <base>...HEAD`. Done when every changed file has its ranges.
+1. **Scope.** jscpd reads what is on disk, so the checkout must be the change under review. Given a PR number, compare its `headRefName` from `gh pr view <n> --json headRefName,baseRefName` with the current branch; if they differ, ask before checking it out.
 
-2. **Detect.** Run jscpd over the whole source tree of the dominant language, tests included, so a clone's far side is visible:
+   Resolve the diff base: `git merge-base HEAD origin/<default>`, or the PR's base branch. List changed files and line ranges with `git diff -U0 <base>`, which includes uncommitted edits, so the line numbers match the disk. Count untracked source files from `git status --short` as fully changed. Done when every changed file has its ranges.
+
+2. **Detect.** Run jscpd from the repo root over the whole tree, tests included, so a clone's far side is visible and reported paths match git's:
 
    ```bash
-   npx --yes jscpd <src dirs> --format <lang> --min-lines 5 --min-tokens 50 \
+   npx --yes jscpd@5 . --format <langs> --min-lines 5 --min-tokens 50 \
+     --similarity --max-gap-lines 3 --baseline-from-ref <base> \
      --reporters json --output /tmp/jscpd-out --silent
    ```
 
-   Use the repo's own jscpd config or script when one exists. Report the totals (clones, duplicated lines, percentage). Done when `/tmp/jscpd-out/jscpd-report.json` exists.
+   `<langs>` is a comma-separated list of jscpd format names (`npx --yes jscpd@5 --list`) for the languages of the changed files. With a repo `.jscpd.json`, drop the two `--min-*` flags so its thresholds apply.
+
+   Each flag covers a gap in plain token matching: `--similarity` finds functions copied with renamed identifiers (it skips test files, which token matching still covers), `--max-gap-lines` keeps a clone whole when a small edit splits it, and `--baseline-from-ref` sets `isNew` on each clone. Report the totals (clones, duplicated lines, percentage). Done when `/tmp/jscpd-out/jscpd-report.json` exists and this run wrote it.
 
 3. **Intersect.** Keep a clone when either side's line range overlaps a changed range from step 1. Sort the rest into two lists:
    - **Involved**: clones touching the change.
-   - **Bystanders**: clones the change does not touch. Name them in one line each as follow-ups; leave them out of the verdict.
+   - **Bystanders**: clones the change does not touch. Leave them out of the verdict.
 
    Every clone lands in exactly one list. Done when the lists add up to the jscpd total.
 
-4. **Judge.** Open both sides of every involved clone and rule on it:
-   - **Extract**: the sides share one reason to change. Name the abstraction (helper, shared struct, fixture method), where it lives, and which clones it retires.
-   - **Tolerate**: the sides look alike by accident, or differ in what they exist to show (a test's distinguishing step, a config struct whose fields will diverge). Say why in one line.
-   - **Introduced here** or **pre-existing**: check with `git blame` or the diff whether this change created the duplicate side.
+4. **Group and judge.** Open both sides of every involved clone. Group clones that one element could retire into a family, because a single abstraction that retires several clones beats one helper per clone. Then rule on each family:
+   - **Extract**: the sides share one reason to change, and the call sites read better with the element. Name it (helper, shared struct, fixture method), using the repo's domain terms or glossary where they exist. Say where it lives, which clones it retires, and the estimated lines before and after.
+   - **Tolerate**: the sides look alike by accident, or differ in what they exist to show (a test's distinguishing step, a config struct whose fields will diverge). Say why in one line. Fewer lines alone is no reason to extract.
 
-   Prefer one abstraction that retires several clones over one helper per clone. Done when every involved clone has a ruling.
+   Separately, mark each clone's origin:
+   - **Introduced**: this change created the duplicate.
+   - **Pre-existing, edited here**: the clone predates the change and one side was edited. Check whether the other side needs the same edit.
 
-5. **Report.** Per involved clone: `file:lines <> file:lines`, ruling, proposed abstraction. Then the bystander list. Leave the code unchanged unless asked; when asked, apply the extractions, run the tests, then rerun step 2 on the touched files to confirm the clones are gone.
+   `isNew` is a hint: editing an older clone also reads as new, so confirm with `git show <base>:<path>`. Done when every family has a ruling and every clone an origin.
+
+5. **Report.** One entry per family, Extract first, largest saving first:
+
+   ```markdown
+   ### <element name>: Extract | Tolerate
+   Would have made this change easy because: <one line>
+   Lives in: <path> · Lines: <before> to <after>
+   - file:lines <> file:lines (Introduced | Pre-existing, edited here)
+   ```
+
+   Then the five largest bystanders, one line each, and a count of the rest, as follow-ups.
+
+   Leave the code unchanged unless asked. When asked, apply each extraction as its own refactor-only commit, separate from feature work. Run the tests, rerun step 2 to confirm the clones are gone, and report predicted against actual lines.
 
 ## Reading the numbers
 
-jscpd matches token sequences, so it flags repeated shape. Setup boilerplate in tests and field lists in config structs are the usual hits; judge them on whether the abstraction would read better at the call site.
+jscpd flags repeated shape. Setup boilerplate in tests and field lists in config structs are the usual token hits, and `--similarity` ignores local names and literals, so a score of 1.0 says the structure matches, not the meaning. Judge each on whether the element would read better at the call site.
+
+jscpd cannot see the same intent written differently, or helpers under 5 lines. No clone is not proof that no similar code exists.
