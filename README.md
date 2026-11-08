@@ -11,6 +11,16 @@ Pairs with [code-refactor-review](https://github.com/xpepper/code-refactor-revie
 
 ## Install
 
+The preferred way is [`npx skills`](https://github.com/vercel-labs/skills), globally for all your projects:
+
+```bash
+npx skills add xpepper/duplication-review -g
+```
+
+Update an existing install with `npx skills update duplication-review -g`.
+
+Alternatively, use the GitHub CLI:
+
 ```bash
 gh skill install xpepper/duplication-review
 ```
