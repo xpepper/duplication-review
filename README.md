@@ -16,3 +16,7 @@ gh skill install xpepper/duplication-review
 ```
 
 Requires `git` and Node (`npx`).
+
+## Usage
+
+The skill never triggers on its own. Run it by typing `/duplication-review` in an interactive Claude Code or Copilot CLI session. Copilot's non-interactive `copilot -p` mode cannot run it, because it does not expand the slash command.

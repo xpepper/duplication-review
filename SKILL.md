@@ -2,6 +2,7 @@
 name: duplication-review
 description: Clone evidence for a change. Use when reviewing a diff, PR or branch for missing abstractions, copy/paste, duplicated setup or "should this be extracted"; also when asked to run jscpd or a copy/paste detector.
 license: MIT
+disable-model-invocation: true
 compatibility: Needs git and Node (npx) to run jscpd.
 allowed-tools: Bash(git:*) Bash(npx:*) Bash(python3:*) Read
 ---
