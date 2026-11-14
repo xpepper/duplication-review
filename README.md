@@ -43,3 +43,9 @@ node --test 'tests/*.test.mjs'
 ```
 
 `tests/cli.test.mjs` runs the script against a throwaway git repository and fetches jscpd through `npx`, so it needs network access the first time.
+
+The script pins jscpd to an exact version (`JSCPD_VERSION` in `scripts/clones.mjs`), so the same repo gives the same report over time. To bump it:
+
+1. Read the jscpd changelog between the two versions for changes to what the script relies on: the flags `--similarity`, `--max-gap-lines`, `--baseline-from-ref` and `--report-name`; the report fields `duplicates[].firstFile` and `secondFile` (`name`, `start`, `end`), `kind`, `isNew`, `similarity`, `statistics.total` and `statistics.formats`; and a rejected option printing `Error: ...` while still exiting 0.
+2. Change the constant.
+3. Run the tests.

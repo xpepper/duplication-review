@@ -25,6 +25,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    - `involved`: clones with a side overlapping a changed line range. `touched` marks that side.
    - `bystanders`: the `count` of clones the change does not touch, and the `largest`. Leave them out of the verdict.
    - `totals`: clones, duplicated lines and percentage for the whole tree. Report them.
+   - `jscpd`: the jscpd version that ran.
 
    Take both lists as given rather than recomputing them; the full jscpd output is at `report` if a detail is missing. Empty `formats` means jscpd has nothing to scan on disk (no added or modified lines, ignored paths, or no language jscpd knows): say so and stop.
 

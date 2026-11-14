@@ -96,6 +96,7 @@ test("a branch with nothing changed reports nothing and scans nothing", (t) => {
 
   assert.equal(status, 0);
   assert.deepEqual(summary, {
+    jscpd: summary.jscpd,
     base,
     changedFiles: 0,
     formats: [],
@@ -104,6 +105,13 @@ test("a branch with nothing changed reports nothing and scans nothing", (t) => {
     involved: [],
     bystanders: { count: 0, largest: [] },
   });
+});
+
+test("the summary names the exact jscpd version it ran", () => {
+  const { status, summary } = run();
+
+  assert.equal(status, 0);
+  assert.match(summary.jscpd, /^\d+\.\d+\.\d+$/);
 });
 
 test("a committed copy is involved and an old clone elsewhere is a bystander", () => {
