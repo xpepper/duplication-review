@@ -118,13 +118,15 @@ export function partitionClones(duplicates, changed) {
 }
 
 function largestFirst(a, b) {
-  return b.lines - a.lines || position(a).localeCompare(position(b));
-}
-
-function position(clone) {
-  return clone.sides
-    .map((side) => `${side.path}:${String(side.start).padStart(9, "0")}`)
-    .join(" ");
+  if (b.lines !== a.lines) return b.lines - a.lines;
+  for (let i = 0; i < a.sides.length; i++) {
+    const first = a.sides[i];
+    const second = b.sides[i];
+    if (first.path !== second.path) return first.path < second.path ? -1 : 1;
+    if (first.start !== second.start) return first.start - second.start;
+    if (first.end !== second.end) return first.end - second.end;
+  }
+  return 0;
 }
 
 class Failure extends Error {}

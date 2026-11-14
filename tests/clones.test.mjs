@@ -143,17 +143,28 @@ test("an untracked file is changed in full", () => {
   assert.equal(involved.length, 1);
 });
 
-test("both lists are ordered largest first, then by position", () => {
-  const changed = { "src/a.js": [{ start: 1, end: Infinity }] };
+test("both lists are ordered largest first, then by locale-independent position", () => {
+  const changed = { "src/a.js": [{ start: 1, end: Infinity }], "src/B.js": [{ start: 1, end: Infinity }] };
   const small = clone(["src/a.js", 1, 5], ["src/b.js", 1, 5]);
   const bigLate = clone(["src/a.js", 50, 70], ["src/b.js", 50, 70]);
-  const bigEarly = clone(["src/a.js", 20, 40], ["src/b.js", 20, 40]);
+  const bigEarlySecondLate = clone(["src/a.js", 20, 40], ["src/b.js", 60, 80]);
+  const bigEarlySecondEarly = clone(["src/a.js", 20, 40], ["src/b.js", 20, 40]);
+  const bigUppercase = clone(["src/B.js", 20, 40], ["src/b.js", 20, 40]);
 
-  const { involved } = partitionClones([small, bigLate, bigEarly], changed);
+  const { involved } = partitionClones(
+    [small, bigLate, bigEarlySecondLate, bigEarlySecondEarly, bigUppercase],
+    changed,
+  );
 
   assert.deepEqual(
-    involved.map((c) => c.sides[0].start),
-    [20, 50, 1],
+    involved.map((c) => [c.sides[0].path, c.sides[0].start, c.sides[1].start]),
+    [
+      ["src/B.js", 20, 20],
+      ["src/a.js", 20, 20],
+      ["src/a.js", 20, 60],
+      ["src/a.js", 50, 50],
+      ["src/a.js", 1, 1],
+    ],
   );
 });
 
