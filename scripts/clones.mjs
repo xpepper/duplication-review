@@ -209,7 +209,8 @@ function readReport(outDir, name) {
   return { path, report: JSON.parse(readFileSync(path, "utf8")) };
 }
 
-const EXIT_GATES = new Set([
+// CI exit gates and repo baselines conflict with our report-only --baseline-from-ref scan.
+const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
   "exit_code",
@@ -217,6 +218,11 @@ const EXIT_GATES = new Set([
   "fail_on_new_clones",
   "failOnEmpty",
   "fail_on_empty",
+  "baseline",
+  "baselineFromRef",
+  "baseline_from_ref",
+  "updateBaseline",
+  "update_baseline",
 ]);
 
 function jscpdConfig(root, outDir) {
@@ -234,7 +240,7 @@ function jscpdConfig(root, outDir) {
     throw new Failure("Invalid .jscpd.json: expected a JSON object.");
   }
   const stripped = Object.fromEntries(
-    Object.entries(parsed).filter(([key]) => !EXIT_GATES.has(key)),
+    Object.entries(parsed).filter(([key]) => !STRIPPED_CONFIG_KEYS.has(key)),
   );
   const target = join(outDir, "config.json");
   try {
