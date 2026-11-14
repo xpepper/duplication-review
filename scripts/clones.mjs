@@ -8,7 +8,10 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const JSCPD = "jscpd@5";
+// Pinned so the same repo gives the same report over time. README "Development"
+// says how to bump it.
+const JSCPD_VERSION = "5.4.3";
+const JSCPD = `jscpd@${JSCPD_VERSION}`;
 const LARGEST_BYSTANDERS = 5;
 
 const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
@@ -290,6 +293,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const options = onDisk.length > 0 ? jscpdConfig(root, outDir) : null;
 
   const summary = {
+    jscpd: JSCPD_VERSION,
     base,
     changedFiles: paths.length,
     formats: options ? formatsOf(root, outDir, onDisk, options.config) : [],
