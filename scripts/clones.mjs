@@ -209,20 +209,17 @@ function readReport(outDir, name) {
   return { path, report: JSON.parse(readFileSync(path, "utf8")) };
 }
 
-// CI exit gates and repo baselines conflict with our report-only --baseline-from-ref scan.
+// Settings that make jscpd fail a CI build, or that point it at a baseline of
+// the repo's own, would clash with this scan, which only wants the report and
+// sets its own --baseline-from-ref. jscpd 5 reads only these camelCase names
+// from .jscpd.json (checked with --debug), so snake_case spellings need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
-  "exit_code",
   "failOnNewClones",
-  "fail_on_new_clones",
   "failOnEmpty",
-  "fail_on_empty",
   "baseline",
   "baselineFromRef",
-  "baseline_from_ref",
-  "updateBaseline",
-  "update_baseline",
 ]);
 
 function jscpdConfig(root, outDir) {
