@@ -4,7 +4,7 @@
 // into those touching the change and the rest. Prints a JSON summary.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -290,7 +290,14 @@ function main(argv) {
   console.log(JSON.stringify(review(options), null, 2));
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+// Node resolves symlinks in import.meta.url but not in argv, and an installed
+// skill is usually a symlink, so compare real paths.
+function runAsScript() {
+  const entry = process.argv[1];
+  return Boolean(entry) && import.meta.url === pathToFileURL(realpathSync(entry)).href;
+}
+
+if (runAsScript()) {
   try {
     main(process.argv.slice(2));
   } catch (error) {

@@ -4,7 +4,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -181,6 +181,17 @@ test("an explicit base narrows the change to what came after it", () => {
 
   assert.equal(summary.base, git("rev-parse", "HEAD"));
   assert.equal(summary.changedFiles, 0);
+});
+
+test("it runs when the skill directory is reached through a symlink", (t) => {
+  const links = mkdtempSync(join(tmpdir(), "clones-link-"));
+  t.after(() => rmSync(links, { recursive: true, force: true }));
+  symlinkSync(join(dirname(SCRIPT), ".."), join(links, "skill"));
+
+  const linked = join(links, "skill", "scripts", "clones.mjs");
+  const result = spawnSync("node", [linked, "--base", "HEAD"], { cwd: repo, encoding: "utf8" });
+
+  assert.equal(JSON.parse(result.stdout || "null")?.changedFiles, 0);
 });
 
 test("a base that does not exist fails with a message instead of a stack trace", () => {
