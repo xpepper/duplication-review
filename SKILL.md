@@ -26,7 +26,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
      --reporters json --output "$(git rev-parse --absolute-git-dir)/jscpd-out" --silent
    ```
 
-   `<langs>` is a comma-separated list of jscpd format names (`npx --yes jscpd@5 --list`) for the languages of the changed files. With a repo `.jscpd.json`, drop the two `--min-*` flags so its thresholds apply. The report goes in the git directory, which is never committed or scanned and is usually writable even when a sandbox blocks `/tmp`. In a linked worktree the git directory lives in the main repo's `.git`, outside the worktree, so a sandbox limited to the worktree may block it.
+   `<langs>` is a comma-separated list of jscpd format names (`npx --yes jscpd@5 --list`) for the languages of the changed files. With a repo `.jscpd.json`, drop the two `--min-*` flags so its thresholds apply. The report goes in the git directory, which is never committed or scanned and is usually writable even when a sandbox blocks `/tmp`. In a linked worktree the git directory lives in the main repo's `.git`, outside the worktree, so a sandbox limited to the worktree may block it. If the write is blocked, ask the user for write access to that path rather than writing the report into the working tree.
 
    Each flag covers a gap in plain token matching: `--similarity` finds functions copied with renamed identifiers (it skips test files, which token matching still covers), `--max-gap-lines` keeps a clone whole when a small edit splits it, and `--baseline-from-ref` sets `isNew` on each clone. Report the totals (clones, duplicated lines, percentage). Done when `jscpd-out/jscpd-report.json` exists in the git directory; the `rm -rf` first means a report there came from this run.
 
