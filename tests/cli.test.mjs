@@ -182,12 +182,16 @@ test("exit-code gates in .jscpd.json do not fail the scan", (t) => {
 
   assert.equal(empty.status, 0, empty.stderr);
   assert.equal(empty.summary.totals.clones, 0);
+});
 
+test("a .jscpd.json that is not valid JSON fails with a message", (t) => {
+  t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
   write(".jscpd.json", "{not valid json");
-  const broken = run();
 
-  assert.equal(broken.status, 1);
-  assert.match(broken.stderr, /Invalid \.jscpd\.json:/);
+  const { status, stderr } = run();
+
+  assert.equal(status, 1);
+  assert.match(stderr, /Invalid \.jscpd\.json:/);
 });
 
 test("uncommitted and untracked files count as part of the change", (t) => {
