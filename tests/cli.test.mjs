@@ -157,6 +157,36 @@ test("a repo's own .jscpd.json thresholds apply instead of the defaults", (t) =>
   assert.equal(summary.totals.clones, 0);
 });
 
+test("exit-code gates in .jscpd.json do not fail the scan", (t) => {
+  t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
+  write(
+    ".jscpd.json",
+    JSON.stringify({
+      threshold: 0,
+      exitCode: 2,
+      failOnNewClones: 0,
+      failOnEmpty: true,
+    }),
+  );
+
+  const { status, stderr, summary } = run();
+
+  assert.equal(status, 0, stderr);
+  assert.ok(summary.involved.length >= 1);
+
+  write(".jscpd.json", JSON.stringify({ minLines: 50, failOnEmpty: true }));
+  const empty = run();
+
+  assert.equal(empty.status, 0, empty.stderr);
+  assert.equal(empty.summary.totals.clones, 0);
+
+  write(".jscpd.json", "{not valid json");
+  const broken = run();
+
+  assert.equal(broken.status, 1);
+  assert.match(broken.stderr, /Invalid \.jscpd\.json:/);
+});
+
 test("uncommitted and untracked files count as part of the change", (t) => {
   t.after(() => {
     git("checkout", "--", "legacy/export_a.js");

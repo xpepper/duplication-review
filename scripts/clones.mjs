@@ -4,7 +4,7 @@
 // into those touching the change and the rest. Prints a JSON summary.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -191,8 +191,8 @@ function jscpd(root, args) {
   if (run.error) throw new Failure(`Could not run npx: ${run.error.message}`);
   // jscpd reports a rejected option on its output and still exits 0.
   const output = `${run.stdout}${run.stderr}`.trim();
-  if (run.status !== 0 || /^Error:/m.test(output)) {
-    throw new Failure(`jscpd failed:\n${output}`);
+  if (run.signal || run.status !== 0 || /^Error:/m.test(output)) {
+    throw new Failure(`jscpd failed:\n${output || `terminated by ${run.signal}`}`);
   }
 }
 
@@ -207,12 +207,51 @@ function readReport(outDir, name) {
   return { path, report: JSON.parse(readFileSync(path, "utf8")) };
 }
 
+const EXIT_GATES = new Set([
+  "threshold",
+  "exitCode",
+  "exit_code",
+  "failOnNewClones",
+  "fail_on_new_clones",
+  "failOnEmpty",
+  "fail_on_empty",
+]);
+
+function jscpdConfig(root, outDir) {
+  const source = join(root, ".jscpd.json");
+  if (!existsSync(source)) {
+    return { config: [], thresholds: ["--min-lines", "5", "--min-tokens", "50"] };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(source, "utf8"));
+  } catch (error) {
+    throw new Failure(`Invalid .jscpd.json: ${error.message}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Failure("Invalid .jscpd.json: expected a JSON object.");
+  }
+  const stripped = Object.fromEntries(
+    Object.entries(parsed).filter(([key]) => !EXIT_GATES.has(key)),
+  );
+  const target = join(outDir, "config.json");
+  try {
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(target, JSON.stringify(stripped));
+  } catch (error) {
+    throw new Failure(
+      `Could not write ${target} (${error.message}). If a sandbox blocks that path, ` +
+        "grant write access to it rather than moving the report into the working tree.",
+    );
+  }
+  return { config: ["--config", target], thresholds: [] };
+}
+
 // jscpd takes format names, not extensions, so it names the changed files' formats itself.
-function formatsOf(root, outDir, paths) {
-  const onDisk = paths.filter((path) => existsSync(join(root, path)));
-  if (onDisk.length === 0) return [];
+function formatsOf(root, outDir, onDisk, config) {
   jscpd(root, [
     ...onDisk,
+    ...config,
     "--min-lines", "1", "--min-tokens", "1",
     "--reporters", "json", "--output", outDir, "--report-name", "changed-formats",
   ]);
@@ -220,12 +259,10 @@ function formatsOf(root, outDir, paths) {
   return Object.keys(report.statistics.formats).sort();
 }
 
-function detect(root, outDir, base, formats) {
-  const thresholds = existsSync(join(root, ".jscpd.json"))
-    ? []
-    : ["--min-lines", "5", "--min-tokens", "50"];
+function detect(root, outDir, base, formats, { config, thresholds }) {
   jscpd(root, [
     ".",
+    ...config,
     "--format", formats.join(","),
     ...thresholds,
     "--similarity", "--max-gap-lines", "3", "--baseline-from-ref", base,
@@ -243,10 +280,14 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const outDir = join(git(root, "rev-parse", "--absolute-git-dir").trim(), "jscpd-out");
   rmSync(outDir, { recursive: true, force: true });
 
+  const paths = Object.keys(changed);
+  const onDisk = paths.filter((path) => existsSync(join(root, path)));
+  const options = onDisk.length > 0 ? jscpdConfig(root, outDir) : null;
+
   const summary = {
     base,
-    changedFiles: Object.keys(changed).length,
-    formats: formatsOf(root, outDir, Object.keys(changed)),
+    changedFiles: paths.length,
+    formats: options ? formatsOf(root, outDir, onDisk, options.config) : [],
     report: null,
     totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
     involved: [],
@@ -254,7 +295,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   };
   if (summary.formats.length === 0) return summary;
 
-  const { path, report } = detect(root, outDir, base, summary.formats);
+  const { path, report } = detect(root, outDir, base, summary.formats, options);
   const { involved, bystanders } = partitionClones(report.duplicates, changed);
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
