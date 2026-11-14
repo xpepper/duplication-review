@@ -64,8 +64,8 @@ function write(path, content) {
   writeFileSync(join(repo, path), content);
 }
 
-function run(...args) {
-  const result = spawnSync("node", [SCRIPT, ...args], { cwd: repo, encoding: "utf8" });
+function run(args = [], { cwd = repo, script = SCRIPT } = {}) {
+  const result = spawnSync("node", [script, ...args], { cwd, encoding: "utf8" });
   return { ...result, summary: result.status === 0 ? JSON.parse(result.stdout) : null };
 }
 
@@ -81,11 +81,17 @@ before(() => {
   git("commit", "--quiet", "--message", "base");
   base = git("rev-parse", "HEAD");
   git("switch", "--quiet", "--create", "change");
+  write("src/order.js", totalFunction("orderTotal"));
+  git("add", "--all");
+  git("commit", "--quiet", "--message", "add order total");
 });
 
 after(() => rmSync(repo, { recursive: true, force: true }));
 
-test("a branch with nothing changed reports nothing and scans nothing", () => {
+test("a branch with nothing changed reports nothing and scans nothing", (t) => {
+  t.after(() => git("switch", "--quiet", "change"));
+  git("switch", "--quiet", "main");
+
   const { status, summary } = run();
 
   assert.equal(status, 0);
@@ -101,10 +107,6 @@ test("a branch with nothing changed reports nothing and scans nothing", () => {
 });
 
 test("a committed copy is involved and an old clone elsewhere is a bystander", () => {
-  write("src/order.js", totalFunction("orderTotal"));
-  git("add", "--all");
-  git("commit", "--quiet", "--message", "add order total");
-
   const { status, stderr, summary } = run();
 
   assert.equal(status, 0, stderr);
@@ -149,7 +151,7 @@ test("a report left by an earlier run is cleared first", () => {
 });
 
 test("a repo's own .jscpd.json thresholds apply instead of the defaults", (t) => {
-  t.after(() => rmSync(join(repo, ".jscpd.json")));
+  t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
   write(".jscpd.json", JSON.stringify({ minLines: 50 }));
 
   const { summary } = run();
@@ -207,7 +209,7 @@ test("uncommitted and untracked files count as part of the change", (t) => {
 });
 
 test("an explicit base narrows the change to what came after it", () => {
-  const { summary } = run("--base", "HEAD");
+  const { summary } = run(["--base", "HEAD"]);
 
   assert.equal(summary.base, git("rev-parse", "HEAD"));
   assert.equal(summary.changedFiles, 0);
@@ -219,21 +221,22 @@ test("it runs when the skill directory is reached through a symlink", (t) => {
   symlinkSync(join(dirname(SCRIPT), ".."), join(links, "skill"));
 
   const linked = join(links, "skill", "scripts", "clones.mjs");
-  const result = spawnSync("node", [linked, "--base", "HEAD"], { cwd: repo, encoding: "utf8" });
+  const { status, summary } = run(["--base", "HEAD"], { script: linked });
 
-  assert.equal(JSON.parse(result.stdout || "null")?.changedFiles, 0);
+  assert.equal(status, 0);
+  assert.equal(summary.changedFiles, 0);
 });
 
 test("a base that does not exist fails with a message instead of a stack trace", () => {
-  const { status, stderr } = run("--base", "no-such-branch");
+  const { status, stderr } = run(["--base", "no-such-branch"]);
 
   assert.equal(status, 1);
   assert.equal(stderr.trim(), "No merge base between HEAD and 'no-such-branch'.");
 });
 
 test("outside a git repository it says so", () => {
-  const result = spawnSync("node", [SCRIPT], { cwd: tmpdir(), encoding: "utf8" });
+  const { status, stderr } = run([], { cwd: tmpdir() });
 
-  assert.equal(result.status, 1);
-  assert.equal(result.stderr.trim(), "Not inside a git repository.");
+  assert.equal(status, 1);
+  assert.equal(stderr.trim(), "Not inside a git repository.");
 });
