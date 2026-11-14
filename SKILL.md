@@ -20,6 +20,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 2. **Detect.** Run jscpd from the repo root over the whole tree, tests included, so a clone's far side is visible and reported paths match git's:
 
    ```bash
+   rm -rf "$(git rev-parse --absolute-git-dir)/jscpd-out"
    npx --yes jscpd@5 . --format <langs> --min-lines 5 --min-tokens 50 \
      --similarity --max-gap-lines 3 --baseline-from-ref <base> \
      --reporters json --output "$(git rev-parse --absolute-git-dir)/jscpd-out" --silent
@@ -27,7 +28,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
    `<langs>` is a comma-separated list of jscpd format names (`npx --yes jscpd@5 --list`) for the languages of the changed files. With a repo `.jscpd.json`, drop the two `--min-*` flags so its thresholds apply. The report goes in the git directory, which is never committed or scanned and is usually writable even when a sandbox blocks `/tmp`. In a linked worktree the git directory lives in the main repo's `.git`, outside the worktree, so a sandbox limited to the worktree may block it.
 
-   Each flag covers a gap in plain token matching: `--similarity` finds functions copied with renamed identifiers (it skips test files, which token matching still covers), `--max-gap-lines` keeps a clone whole when a small edit splits it, and `--baseline-from-ref` sets `isNew` on each clone. Report the totals (clones, duplicated lines, percentage). Done when `jscpd-out/jscpd-report.json` exists in the git directory and this run wrote it.
+   Each flag covers a gap in plain token matching: `--similarity` finds functions copied with renamed identifiers (it skips test files, which token matching still covers), `--max-gap-lines` keeps a clone whole when a small edit splits it, and `--baseline-from-ref` sets `isNew` on each clone. Report the totals (clones, duplicated lines, percentage). Done when `jscpd-out/jscpd-report.json` exists in the git directory; the `rm -rf` first means a report there came from this run.
 
 3. **Intersect.** Keep a clone when either side's line range overlaps a changed range from step 1. Sort the rest into two lists:
    - **Involved**: clones touching the change.
