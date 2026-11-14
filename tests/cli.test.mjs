@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { JSCPD_VERSION } from "../scripts/clones.mjs";
+
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "clones.mjs");
 
 const totalFunction = (name) => `export function ${name}(items, taxRate) {
@@ -165,6 +167,32 @@ test("a repo's own .jscpd.json thresholds apply instead of the defaults", (t) =>
   const { summary } = run();
 
   assert.equal(summary.totals.clones, 0);
+});
+
+test("thresholds from a jscpd key in package.json apply instead of the defaults", (t) => {
+  t.after(() => rmSync(join(repo, "package.json"), { force: true }));
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 50 } }));
+
+  const { summary } = run();
+
+  assert.equal(summary.totals.clones, 0);
+});
+
+// The script relies on jscpd's own minimum clone size. If a version bump
+// changes it, decide whether to pass the old values again.
+test(`jscpd ${JSCPD_VERSION} defaults to clones of at least 5 lines and 50 tokens`, () => {
+  const empty = mkdtempSync(join(tmpdir(), "jscpd-defaults-"));
+  try {
+    const output = execFileSync("npx", ["--yes", `jscpd@${JSCPD_VERSION}`, ".", "--debug"], {
+      cwd: empty,
+      encoding: "utf8",
+    });
+
+    assert.match(output, /"min_lines": 5,/);
+    assert.match(output, /"min_tokens": 50,/);
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
 });
 
 test("exit-code gates in .jscpd.json do not fail the scan", (t) => {

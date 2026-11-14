@@ -46,6 +46,6 @@ node --test 'tests/*.test.mjs'
 
 The script pins jscpd to an exact version (`JSCPD_VERSION` in `scripts/clones.mjs`), so the same repo gives the same report over time. To bump it:
 
-1. Read the jscpd changelog between the two versions for changes to what the script relies on: the flags `--similarity`, `--max-gap-lines`, `--baseline-from-ref` and `--report-name`; the report fields `duplicates[].firstFile` and `secondFile` (`name`, `start`, `end`), `kind`, `isNew`, `similarity`, `statistics.total` and `statistics.formats`; and a rejected option printing `Error: ...` while still exiting 0.
+1. Read the jscpd changelog between the two versions for changes to what the script relies on: the flags `--similarity`, `--max-gap-lines`, `--baseline-from-ref` and `--report-name`; the report fields `duplicates[].firstFile` and `secondFile` (`name`, `start`, `end`), `kind`, `isNew`, `similarity`, `statistics.total` and `statistics.formats`; the default minimum clone size of 5 lines and 50 tokens, which a test checks; and a rejected option printing `Error: ...` while still exiting 0.
 2. Change the constant.
 3. Run the tests.

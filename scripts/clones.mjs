@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 
 // Pinned so the same repo gives the same report over time. README "Development"
 // says how to bump it.
-const JSCPD_VERSION = "5.4.3";
+export const JSCPD_VERSION = "5.4.3";
 const JSCPD = `jscpd@${JSCPD_VERSION}`;
 const LARGEST_BYSTANDERS = 5;
 
@@ -228,7 +228,7 @@ const STRIPPED_CONFIG_KEYS = new Set([
 function jscpdConfig(root, outDir) {
   const source = join(root, ".jscpd.json");
   if (!existsSync(source)) {
-    return { config: [], thresholds: ["--min-lines", "5", "--min-tokens", "50"] };
+    return [];
   }
   let parsed;
   try {
@@ -252,7 +252,7 @@ function jscpdConfig(root, outDir) {
         "grant write access to it rather than moving the report into the working tree.",
     );
   }
-  return { config: ["--config", target], thresholds: [] };
+  return ["--config", target];
 }
 
 // jscpd takes format names, not extensions, so it names the changed files' formats itself.
@@ -267,12 +267,11 @@ function formatsOf(root, outDir, onDisk, config) {
   return Object.keys(report.statistics.formats).sort();
 }
 
-function detect(root, outDir, base, formats, { config, thresholds }) {
+function detect(root, outDir, base, formats, config) {
   jscpd(root, [
     ".",
     ...config,
     "--format", formats.join(","),
-    ...thresholds,
     "--similarity", "--max-gap-lines", "3", "--baseline-from-ref", base,
     "--reporters", "json", "--output", outDir,
   ]);
@@ -290,13 +289,13 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
 
   const paths = Object.keys(changed);
   const onDisk = paths.filter((path) => existsSync(join(root, path)));
-  const options = onDisk.length > 0 ? jscpdConfig(root, outDir) : null;
+  const config = onDisk.length > 0 ? jscpdConfig(root, outDir) : null;
 
   const summary = {
     jscpd: JSCPD_VERSION,
     base,
     changedFiles: paths.length,
-    formats: options ? formatsOf(root, outDir, onDisk, options.config) : [],
+    formats: config ? formatsOf(root, outDir, onDisk, config) : [],
     report: null,
     totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
     involved: [],
@@ -304,7 +303,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   };
   if (summary.formats.length === 0) return summary;
 
-  const { path, report } = detect(root, outDir, base, summary.formats, options);
+  const { path, report } = detect(root, outDir, base, summary.formats, config);
   const { involved, bystanders } = partitionClones(report.duplicates, changed);
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
