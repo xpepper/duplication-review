@@ -23,12 +23,12 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
    Pass `--base` for a PR; without it the script uses the remote's default branch. It diffs from the merge base (uncommitted and untracked files included), runs jscpd over the whole tree in the languages of the changed files, and prints JSON:
    - `involved`: clones with a side overlapping a changed line range. `touched` marks that side.
-   - `bystanders`: the `count` of clones the change does not touch, and the five `largest`. Leave them out of the verdict.
+   - `bystanders`: the `count` of clones the change does not touch, and the `largest`. Leave them out of the verdict.
    - `totals`: clones, duplicated lines and percentage for the whole tree. Report them.
 
-   Take both lists as given rather than recomputing them; the full jscpd output is at `report` if a detail is missing. Empty `formats` means jscpd scans none of the changed files' languages: say so and stop.
+   Take both lists as given rather than recomputing them; the full jscpd output is at `report` if a detail is missing. Empty `formats` means jscpd has nothing to scan on disk (no added or modified lines, ignored paths, or no language jscpd knows): say so and stop.
 
-   If the script fails, relay its message. The report goes in the git directory, which is never committed or scanned. In a linked worktree that directory lives in the main repo's `.git`, so a sandbox limited to the worktree may block it: ask the user for write access to that path rather than moving the report into the working tree.
+   If the script fails, relay its message. In a linked worktree the report path lives in the main repo's `.git`, outside the worktree, so a sandbox limited to the worktree may block it.
 
 3. **Group and judge.** Open both sides of every involved clone. Group clones that one element could retire into a family, because a single abstraction that retires several clones beats one helper per clone. Then rule on each family:
    - **Extract**: the sides share one reason to change, and the call sites read better with the element. Name it (helper, shared struct, fixture method), using the repo's domain terms or glossary where they exist. Say where it lives, which clones it retires, and the estimated lines before and after.
@@ -40,7 +40,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
    `isNew` is a hint: editing an older clone also reads as new, so confirm with `git show <base>:<path>`, using the summary's `base`. Done when every family has a ruling and every clone an origin.
 
-4. **Report.** One entry per family, Extract first, largest saving first:
+4. **Report.** When `involved` is empty, report `totals` and note that jscpd found no involved clones. Otherwise, write one entry per family, Extract first, largest saving first:
 
    ```markdown
    ### <element name>: Extract | Tolerate
