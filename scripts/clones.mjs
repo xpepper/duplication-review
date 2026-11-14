@@ -105,6 +105,7 @@ export function partitionClones(duplicates, changed) {
       lines: duplicate.lines,
       tokens: duplicate.tokens,
       isNew: duplicate.isNew,
+      ...(duplicate.similarity === undefined ? {} : { similarity: duplicate.similarity }),
       sides,
     };
     (sides.some((side) => side.touched) ? involved : bystanders).push(clone);

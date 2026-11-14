@@ -178,3 +178,13 @@ test("each clone keeps what the judge needs and drops the rest", () => {
     },
   ]);
 });
+
+test("a structural match carries its similarity score", () => {
+  const changed = { "src/a.js": [{ start: 1, end: 3 }] };
+  const { involved } = partitionClones(
+    [clone(["src/a.js", 1, 9], ["src/b.js", 11, 19], { kind: "similar", similarity: 0.86 })],
+    changed,
+  );
+
+  assert.equal(involved[0].similarity, 0.86);
+});
