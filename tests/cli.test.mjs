@@ -216,6 +216,21 @@ test("an explicit base narrows the change to what came after it", () => {
   assert.equal(summary.changedFiles, 0);
 });
 
+test("the base is the merge base, so commits made on the base branch since are not part of the change", (t) => {
+  t.after(() => git("branch", "--force", "main", base));
+  git("switch", "--quiet", "main");
+  write("src/later.js", "export const later = 1;\n");
+  git("add", "--all");
+  git("commit", "--quiet", "--message", "later work on main");
+  git("switch", "--quiet", "change");
+
+  const { status, stderr, summary } = run(["--base", "main"]);
+
+  assert.equal(status, 0, stderr);
+  assert.equal(summary.base, base);
+  assert.equal(summary.changedFiles, 1, "only src/order.js");
+});
+
 test("it runs when the skill directory is reached through a symlink", (t) => {
   const links = mkdtempSync(join(tmpdir(), "clones-link-"));
   t.after(() => rmSync(links, { recursive: true, force: true }));
