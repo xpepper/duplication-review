@@ -220,6 +220,42 @@ test("exit-code gates in .jscpd.json do not fail the scan", (t) => {
   assert.equal(empty.summary.totals.clones, 0);
 });
 
+test("exit-code gates under package.json's jscpd key do not fail the scan", (t) => {
+  t.after(() => rmSync(join(repo, "package.json"), { force: true }));
+  write(
+    "package.json",
+    JSON.stringify({ name: "fixture", jscpd: { threshold: 0, exitCode: 2, failOnNewClones: 0 } }),
+  );
+
+  const { status, stderr, summary } = run();
+
+  assert.equal(status, 0, stderr);
+  assert.ok(summary.involved.length >= 1);
+});
+
+test("a .jscpd.json takes precedence over package.json's jscpd key, as in jscpd itself", (t) => {
+  t.after(() => {
+    rmSync(join(repo, ".jscpd.json"), { force: true });
+    rmSync(join(repo, "package.json"), { force: true });
+  });
+  write(".jscpd.json", JSON.stringify({}));
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 50 } }));
+
+  const { summary } = run();
+
+  assert.ok(summary.totals.clones > 0, "package.json's minLines is ignored");
+});
+
+test("a package.json that is not valid JSON is left to jscpd, which ignores it", (t) => {
+  t.after(() => rmSync(join(repo, "package.json"), { force: true }));
+  write("package.json", "{not valid json");
+
+  const { status, stderr, summary } = run();
+
+  assert.equal(status, 0, stderr);
+  assert.ok(summary.totals.clones > 0);
+});
+
 test("a .jscpd.json that is not valid JSON fails with a message", (t) => {
   t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
   write(".jscpd.json", "{not valid json");
