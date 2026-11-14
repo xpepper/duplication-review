@@ -215,7 +215,8 @@ function readReport(outDir, name) {
 // Settings that make jscpd fail a CI build, or that point it at a baseline of
 // the repo's own, would clash with this scan, which only wants the report and
 // sets its own --baseline-from-ref. jscpd 5 reads only these camelCase names
-// from .jscpd.json (checked with --debug), so snake_case spellings need no entry.
+// from .jscpd.json and package.json (checked with --debug), so snake_case
+// spellings need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
@@ -225,20 +226,36 @@ const STRIPPED_CONFIG_KEYS = new Set([
   "baselineFromRef",
 ]);
 
-function jscpdConfig(root, outDir) {
-  const source = join(root, ".jscpd.json");
-  if (!existsSync(source)) {
-    return [];
+const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+// jscpd reads .jscpd.json, else the jscpd key in package.json, and ignores
+// package.json once --config is given. So passing a stripped copy of whichever
+// one jscpd would use keeps the repo's settings minus the gates.
+function repoConfig(root) {
+  const dotfile = join(root, ".jscpd.json");
+  if (existsSync(dotfile)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(dotfile, "utf8"));
+    } catch (error) {
+      throw new Failure(`Invalid .jscpd.json: ${error.message}`);
+    }
+    if (!isObject(parsed)) throw new Failure("Invalid .jscpd.json: expected a JSON object.");
+    return parsed;
   }
-  let parsed;
+  const manifest = join(root, "package.json");
+  if (!existsSync(manifest)) return null;
   try {
-    parsed = JSON.parse(readFileSync(source, "utf8"));
-  } catch (error) {
-    throw new Failure(`Invalid .jscpd.json: ${error.message}`);
+    const { jscpd } = JSON.parse(readFileSync(manifest, "utf8")) ?? {};
+    return isObject(jscpd) ? jscpd : null;
+  } catch {
+    return null; // jscpd ignores a package.json it cannot parse, so the scan does too.
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Failure("Invalid .jscpd.json: expected a JSON object.");
-  }
+}
+
+function jscpdConfig(root, outDir) {
+  const parsed = repoConfig(root);
+  if (!parsed) return [];
   const stripped = Object.fromEntries(
     Object.entries(parsed).filter(([key]) => !STRIPPED_CONFIG_KEYS.has(key)),
   );
