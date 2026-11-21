@@ -273,7 +273,21 @@ test("exit-code gates under package.json's jscpd key do not fail the scan", (t) 
   t.after(() => rmSync(join(repo, "package.json"), { force: true }));
   write(
     "package.json",
-    JSON.stringify({ name: "fixture", jscpd: { threshold: 0, exitCode: 2, failOnNewClones: 0 } }),
+    JSON.stringify({
+      name: "fixture",
+      jscpd: {
+        baseline: ".jscpd-baseline.json",
+        baselineFromRef: "no-such-ref",
+        threshold: 0,
+        exitCode: 2,
+        failOnNewClones: 0,
+        failOnEmpty: true,
+        "baseline-from-ref": "no-such-ref",
+        "exit-code": 2,
+        "fail-on-new-clones": 0,
+        "fail-on-empty": true,
+      },
+    }),
   );
 
   const { status, stderr, summary } = run();
@@ -282,17 +296,134 @@ test("exit-code gates under package.json's jscpd key do not fail the scan", (t) 
   assert.ok(summary.families.length >= 1);
 });
 
-test("a .jscpd.json takes precedence over package.json's jscpd key, as in jscpd itself", (t) => {
+for (const dotConfig of [".config/jscpd.json", ".config/.jscpd.json"]) {
+  test(`${dotConfig} keeps thresholds and ignores while stripping camelCase gates`, (t) => {
+    t.after(() => rmSync(join(repo, ".config"), { recursive: true, force: true }));
+    write(
+      dotConfig,
+      JSON.stringify({
+        ignore: ["**/legacy/**"],
+        baseline: ".jscpd-baseline.json",
+        baselineFromRef: "no-such-ref",
+        threshold: 0,
+        exitCode: 2,
+        failOnNewClones: 0,
+        failOnEmpty: true,
+      }),
+    );
+
+    const { status, stderr, summary } = run();
+
+    assert.equal(status, 0, stderr);
+    assert.equal(summary.families.length, 1);
+    assert.equal(summary.bystanders.count, 0, "ignore pattern survived");
+    assert.equal(summary.totals.clones, 1);
+
+    write(dotConfig, JSON.stringify({ minLines: 50, failOnEmpty: true }));
+    const thresholded = run();
+
+    assert.equal(thresholded.status, 0, thresholded.stderr);
+    assert.equal(thresholded.summary.totals.clones, 0, "minLines threshold survived");
+  });
+
+  test(`${dotConfig} keeps kebab-case thresholds and ignores while stripping kebab-case gates`, (t) => {
+    t.after(() => rmSync(join(repo, ".config"), { recursive: true, force: true }));
+    write(
+      dotConfig,
+      JSON.stringify({
+        ignore: ["**/legacy/**"],
+        "baseline-from-ref": "no-such-ref",
+        "exit-code": 2,
+        "fail-on-new-clones": 0,
+      }),
+    );
+
+    const { status, stderr, summary } = run();
+
+    assert.equal(status, 0, stderr);
+    assert.equal(summary.families.length, 1);
+    assert.equal(summary.bystanders.count, 0);
+
+    write(dotConfig, JSON.stringify({ "min-lines": 50 }));
+    const thresholded = run();
+
+    assert.equal(thresholded.status, 0, thresholded.stderr);
+    assert.equal(thresholded.summary.totals.clones, 0);
+  });
+
+  test(`kebab-case fail-on-empty in ${dotConfig} does not fail a scan of no files`, (t) => {
+    t.after(() => {
+      rmSync(join(repo, ".config"), { recursive: true, force: true });
+      rmSync(join(repo, "data.xyz"), { force: true });
+      rmSync(join(repo, ".git", "info", "exclude"), { force: true });
+      git("switch", "--quiet", "change");
+    });
+    git("switch", "--quiet", "main");
+    write(".git/info/exclude", ".config/\n");
+    write(dotConfig, JSON.stringify({ "fail-on-empty": true }));
+    write("data.xyz", "not source code\n");
+
+    const { status, stderr, summary } = run();
+
+    assert.equal(status, 0, stderr);
+    assert.deepEqual(summary.formats, []);
+  });
+
+  test(`invalid ${dotConfig} fails with a message naming its source`, (t) => {
+    t.after(() => {
+      rmSync(join(repo, ".config"), { recursive: true, force: true });
+      rmSync(join(repo, "package.json"), { force: true });
+    });
+    write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 50 } }));
+    write(dotConfig, "{not valid json");
+
+    const invalidJson = run();
+
+    assert.equal(invalidJson.status, 1);
+    assert.match(invalidJson.stderr, new RegExp(`Invalid ${dotConfig.replaceAll(".", "\\.")}:`));
+
+    write(dotConfig, "[]");
+    const nonObject = run();
+
+    assert.equal(nonObject.status, 1);
+    assert.match(
+      nonObject.stderr,
+      new RegExp(`Invalid ${dotConfig.replaceAll(".", "\\.")}: expected a JSON object\\.`),
+    );
+  });
+}
+
+test("config precedence matches jscpd: .jscpd.json > .config/jscpd.json > .config/.jscpd.json > package.json", (t) => {
   t.after(() => {
     rmSync(join(repo, ".jscpd.json"), { force: true });
+    rmSync(join(repo, ".config"), { recursive: true, force: true });
     rmSync(join(repo, "package.json"), { force: true });
   });
+
+  // Root .jscpd.json wins over both dot-config files and package.json.
   write(".jscpd.json", JSON.stringify({}));
+  write(".config/jscpd.json", JSON.stringify({ minLines: 50 }));
+  write(".config/.jscpd.json", JSON.stringify({ minLines: 50 }));
   write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 50 } }));
+  assert.ok(run().summary.totals.clones > 0, ".jscpd.json wins over dot-config and package.json");
 
-  const { summary } = run();
+  // .config/jscpd.json wins over .config/.jscpd.json and package.json.
+  rmSync(join(repo, ".jscpd.json"), { force: true });
+  write(".config/jscpd.json", JSON.stringify({ minLines: 50 }));
+  write(".config/.jscpd.json", JSON.stringify({ minLines: 5 }));
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 5 } }));
+  assert.equal(run().summary.totals.clones, 0, ".config/jscpd.json wins over .config/.jscpd.json and package.json");
 
-  assert.ok(summary.totals.clones > 0, "package.json's minLines is ignored");
+  // .config/.jscpd.json wins over package.json.
+  rmSync(join(repo, ".config/jscpd.json"), { force: true });
+  write(".config/.jscpd.json", JSON.stringify({ minLines: 50 }));
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 5 } }));
+  assert.equal(run().summary.totals.clones, 0, ".config/.jscpd.json wins over package.json");
+
+  // And an empty dot-config still shadows package.json's thresholds.
+  write(".config/.jscpd.json", JSON.stringify({}));
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 50 } }));
+  assert.ok(run().summary.totals.clones > 0, "empty .config/.jscpd.json shadows package.json");
 });
 
 test("a package.json that is not valid JSON is left to jscpd, which ignores it", (t) => {

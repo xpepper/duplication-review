@@ -347,9 +347,10 @@ function readReport(outDir, name) {
 // the repo's own, would clash with this scan, which only wants the report. A
 // baseline would also make jscpd scan a second tree for nothing, since the
 // script works out each clone's origin from the diff. jscpd 5.4.3 reads these
-// camelCase names from .jscpd.json and package.json, and the kebab-case
-// aliases listed here. It calls fail-on-empty an unknown field but still
-// applies it. It does not read snake_case spellings, so they need no entry.
+// camelCase names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json
+// and package.json, and the kebab-case aliases listed here. It calls
+// fail-on-empty an unknown field but still applies it. It does not read
+// snake_case spellings, so they need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
@@ -363,38 +364,44 @@ const STRIPPED_CONFIG_KEYS = new Set([
   "baseline-from-ref",
 ]);
 
+// jscpd 5.4.3 auto-discovers these files in order, then package.json's jscpd
+// key, and ignores them all once --config is given.
+const CONFIG_FILES = [".jscpd.json", ".config/jscpd.json", ".config/.jscpd.json"];
+
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
-// jscpd reads .jscpd.json, else the jscpd key in package.json, and ignores
-// package.json once --config is given. So passing a stripped copy of whichever
-// one jscpd would use keeps the repo's settings minus the gates.
-function repoConfig(root) {
-  const dotfile = join(root, ".jscpd.json");
-  if (existsSync(dotfile)) {
-    let parsed;
+/**
+ * Discovers the repository's jscpd config in jscpd's own precedence order:
+ * .jscpd.json, .config/jscpd.json, .config/.jscpd.json, then package.json's
+ * jscpd key. Returns both the parsed config and its source location, or null
+ * when no config applies.
+ */
+export function repoConfig(root) {
+  for (const source of CONFIG_FILES) {
+    const path = join(root, source);
+    if (!existsSync(path)) continue;
+    let config;
     try {
-      parsed = JSON.parse(readFileSync(dotfile, "utf8"));
+      config = JSON.parse(readFileSync(path, "utf8"));
     } catch (error) {
-      throw new Failure(`Invalid .jscpd.json: ${error.message}`);
+      throw new Failure(`Invalid ${source}: ${error.message}`);
     }
-    if (!isObject(parsed)) throw new Failure("Invalid .jscpd.json: expected a JSON object.");
-    return parsed;
+    if (!isObject(config)) throw new Failure(`Invalid ${source}: expected a JSON object.`);
+    return { source, path, config };
   }
-  const manifest = join(root, "package.json");
-  if (!existsSync(manifest)) return null;
+  const path = join(root, "package.json");
+  if (!existsSync(path)) return null;
   try {
-    const { jscpd } = JSON.parse(readFileSync(manifest, "utf8")) ?? {};
-    return isObject(jscpd) ? jscpd : null;
+    const { jscpd } = JSON.parse(readFileSync(path, "utf8")) ?? {};
+    return isObject(jscpd) ? { source: "package.json", path, config: jscpd } : null;
   } catch {
     return null; // jscpd ignores a package.json it cannot parse, so the scan does too.
   }
 }
 
-function jscpdConfig(root, outDir) {
-  const parsed = repoConfig(root);
-  if (!parsed) return [];
+function writeSanitizedConfig(config, outDir) {
   const stripped = Object.fromEntries(
-    Object.entries(parsed).filter(([key]) => !STRIPPED_CONFIG_KEYS.has(key)),
+    Object.entries(config).filter(([key]) => !STRIPPED_CONFIG_KEYS.has(key)),
   );
   const target = join(outDir, "config.json");
   try {
@@ -443,9 +450,10 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
 
   const paths = Object.keys(changed);
   const onDisk = paths.filter((path) => existsSync(join(root, path)));
-  const config = onDisk.length > 0 ? jscpdConfig(root, outDir) : null;
+  const discovered = onDisk.length > 0 ? repoConfig(root) : null;
+  const config = discovered ? writeSanitizedConfig(discovered.config, outDir) : [];
 
-  const formats = config ? formatsOf(root, outDir, onDisk, config) : [];
+  const formats = onDisk.length > 0 ? formatsOf(root, outDir, onDisk, config) : [];
   const detected = formats.length > 0 ? detect(root, outDir, formats, config) : null;
   return summarize(detected?.report ?? null, changed, {
     base,
