@@ -152,15 +152,14 @@ export function candidateFamilies(clones) {
       if (sameFragment(sides[i], sides[j])) fragmentOf.union(i, j);
     }
   }
+  // Families join fragments, so they are built over fragment roots.
   const familyOf = disjointSets(sides.length);
-  for (let i = 0; i < sides.length; i++) familyOf.union(i, fragmentOf.find(i));
-  clones.forEach((_, c) => familyOf.union(2 * c, 2 * c + 1));
+  clones.forEach((_, c) => familyOf.union(fragmentOf.find(2 * c), fragmentOf.find(2 * c + 1)));
 
   const groups = new Map();
   clones.forEach((clone, c) => {
-    const root = familyOf.find(2 * c);
-    if (!groups.has(root)) groups.set(root, { clones: [], fragments: new Map() });
-    const group = groups.get(root);
+    const root = familyOf.find(fragmentOf.find(2 * c));
+    const group = groups.get(root) ?? groups.set(root, { clones: [], fragments: new Map() }).get(root);
     group.clones.push(clone);
     for (const i of [2 * c, 2 * c + 1]) {
       const key = fragmentOf.find(i);
