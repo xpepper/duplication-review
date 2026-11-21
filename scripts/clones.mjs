@@ -322,7 +322,8 @@ function jscpd(root, args) {
     encoding: "utf8",
   });
   if (run.error) throw new Failure(`Could not run npx: ${run.error.message}`);
-  // jscpd reports a rejected option on its output and still exits 0.
+  // jscpd 5.4.3 exits non-zero whenever it prints "Error:". The pattern check
+  // is kept as a guard in case another version prints it and exits 0.
   const output = `${run.stdout}${run.stderr}`.trim();
   if (run.signal || run.status !== 0 || /^Error:/m.test(output)) {
     throw new Failure(`jscpd failed:\n${output || `terminated by ${run.signal}`}`);
