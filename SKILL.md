@@ -32,8 +32,8 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    If the script fails, relay its message. In a linked worktree the report path lives in the main repo's `.git`, outside the worktree, so a sandbox limited to the worktree may block it.
 
 3. **Group and judge.** Open every fragment of each family. Start from `families`, which joins clones that share a fragment, because a single abstraction that retires several clones beats one helper per clone. Merge two families when one element would retire both, or split one when no single element fits all its fragments, and give the reason in one line. A family with a single fragment, or with a fragment much longer than its clones, usually needs a split: overlapping copies in one file have run together. Then rule on each family:
-   - **Extract**: the sides share one reason to change, and the call sites read better with the element. Name it (helper, shared struct, fixture method), using the repo's domain terms or glossary where they exist. Say where it lives, which clones it retires, and the estimated lines before and after.
-   - **Tolerate**: the sides look alike by accident, or differ in what they exist to show (a test's distinguishing step, a config struct whose fields will diverge). Say why in one line. Fewer lines alone is no reason to extract.
+   - **Extract**: the fragments share one reason to change, and the call sites read better with the element. Name it (helper, shared struct, fixture method), using the repo's domain terms or glossary where they exist. Say where it lives, which clones it retires, and the estimated lines before and after.
+   - **Tolerate**: the fragments look alike by accident, or differ in what they exist to show (a test's distinguishing step, a config struct whose fields will diverge). Say why in one line. Fewer lines alone is no reason to extract.
 
    Separately, mark each clone's origin:
    - **Introduced**: this change created the duplicate.
