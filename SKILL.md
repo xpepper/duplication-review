@@ -3,7 +3,7 @@ name: duplication-review
 description: Clone evidence for a change. Use when reviewing a diff, PR or branch for missing abstractions, copy/paste, duplicated setup or "should this be extracted"; also when asked to run jscpd or a copy/paste detector.
 license: MIT
 disable-model-invocation: true
-compatibility: Needs git and Node (node, npx) to run the bundled script and jscpd; gh when given a PR number.
+compatibility: Needs git and Node 22 or later (node, npx) to run the bundled script and jscpd; gh when given a PR number.
 allowed-tools: Bash(git *) Bash(gh pr view *) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs *) Read
 ---
 

@@ -28,7 +28,7 @@ Alternatively, use the GitHub CLI:
 gh skill install xpepper/duplication-review
 ```
 
-Requires `git` and Node (`node`, `npx`), plus `gh` when reviewing by PR number.
+Requires `git` and Node 22 or later (`node`, `npx`), plus `gh` when reviewing by PR number.
 
 ## Usage
 
@@ -43,6 +43,8 @@ node --test 'tests/*.test.mjs'
 ```
 
 `tests/cli.test.mjs` runs the script against a throwaway git repository and fetches jscpd through `npx`, so it needs network access the first time.
+
+CI runs the same command on every pull request and on pushes to `main`, on Node 22 (the minimum) and on the current release. See `.github/workflows/test.yml`.
 
 The script pins jscpd to an exact version (`JSCPD_VERSION` in `scripts/clones.mjs`), so the same repo gives the same report over time. To bump it:
 
