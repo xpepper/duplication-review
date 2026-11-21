@@ -149,7 +149,7 @@ function sameFragment(a, b) {
  * with one anchor only, so a four-way copy arrives as three clones.
  * A family is involved when any of its clones touches the change.
  */
-export function seedFamilies(clones) {
+export function candidateFamilies(clones) {
   const sides = clones.flatMap((clone) => clone.sides);
   const fragmentOf = disjointSets(sides.length);
   for (let i = 0; i < sides.length; i++) {
@@ -412,7 +412,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
 
   const { path, report } = detect(root, outDir, base, summary.formats, config);
   const { involved, bystanders } = partitionClones(report.duplicates, changed);
-  const families = seedFamilies([...involved, ...bystanders]);
+  const families = candidateFamilies([...involved, ...bystanders]);
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
   return {

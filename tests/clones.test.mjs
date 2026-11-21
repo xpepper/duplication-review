@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseChangedRanges, partitionClones, seedFamilies } from "../scripts/clones.mjs";
+import { parseChangedRanges, partitionClones, candidateFamilies } from "../scripts/clones.mjs";
 
 const clone = (first, second, extra = {}) => ({
   format: "javascript",
@@ -202,7 +202,7 @@ test("a structural match carries its similarity score", () => {
 
 const families = (duplicates, changed = {}) => {
   const { involved, bystanders } = partitionClones(duplicates, changed);
-  return seedFamilies([...involved, ...bystanders]);
+  return candidateFamilies([...involved, ...bystanders]);
 };
 
 const fragmentsOf = (family) => family.fragments.map((f) => [f.path, f.start, f.end]);
