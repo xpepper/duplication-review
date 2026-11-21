@@ -310,16 +310,20 @@ function readReport(outDir, name) {
 // Settings that make jscpd fail a CI build, or that point it at a baseline of
 // the repo's own, would clash with this scan, which only wants the report. A
 // baseline would also make jscpd scan a second tree for nothing, since the
-// script works out each clone's origin from the diff. jscpd 5 reads only
-// these camelCase names from .jscpd.json and package.json (checked with
-// --debug), so snake_case spellings need no entry.
+// script works out each clone's origin from the diff. jscpd 5.4.3 reads these
+// camelCase names from .jscpd.json and package.json, and the kebab-case
+// aliases listed here. It rejects fail-on-empty as an unknown field and does
+// not read snake_case spellings, so neither needs an entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
+  "exit-code",
   "failOnNewClones",
+  "fail-on-new-clones",
   "failOnEmpty",
   "baseline",
   "baselineFromRef",
+  "baseline-from-ref",
 ]);
 
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);

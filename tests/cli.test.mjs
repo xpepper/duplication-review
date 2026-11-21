@@ -4,7 +4,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -155,6 +155,15 @@ test("the report lands in the git directory and the working tree stays clean", (
   assert.equal(git("status", "--short"), "");
 });
 
+// The branch adds a clone that the base lacks, so a scan against a baseline
+// would count it as new. Origin comes from the diff, so no such scan is needed.
+test("the scan compares against no baseline", () => {
+  const { summary } = run();
+
+  const report = JSON.parse(readFileSync(summary.report, "utf8"));
+  assert.equal(report.statistics.total.newClones, 0);
+});
+
 test("a report left by an earlier run is cleared first", () => {
   const stale = join(repo, ".git", "jscpd-out", "stale.json");
   write(".git/jscpd-out/stale.json", "{}");
@@ -223,6 +232,21 @@ test("exit-code gates in .jscpd.json do not fail the scan", (t) => {
 
   assert.equal(empty.status, 0, empty.stderr);
   assert.equal(empty.summary.totals.clones, 0);
+});
+
+// jscpd 5 also reads these kebab-case spellings from its config (but not
+// fail-on-empty, which it rejects as an unknown field).
+test("kebab-case gates in .jscpd.json do not fail the scan", (t) => {
+  t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
+  write(
+    ".jscpd.json",
+    JSON.stringify({ "baseline-from-ref": "no-such-ref", "exit-code": 2, "fail-on-new-clones": 0 }),
+  );
+
+  const { status, stderr, summary } = run();
+
+  assert.equal(status, 0, stderr);
+  assert.ok(summary.families.length >= 1);
 });
 
 test("exit-code gates under package.json's jscpd key do not fail the scan", (t) => {
