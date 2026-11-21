@@ -128,12 +128,12 @@ test("a committed copy is involved and an old clone elsewhere is a bystander", (
     summary.families.map((family) => family.fragments.map((f) => [f.path, f.touched])),
     [[["src/invoice.js", false], ["src/order.js", true]]],
   );
-  assert.equal(summary.families[0].clones[0].isNew, true);
+  assert.equal(summary.families[0].clones[0].origin, "introduced");
   assert.deepEqual(
     summary.bystanders.largest.map((family) => family.fragments.map((f) => f.path)),
     [["legacy/export_a.js", "legacy/export_b.js"]],
   );
-  assert.equal(summary.bystanders.largest[0].clones[0].isNew, false);
+  assert.equal(summary.bystanders.largest[0].clones[0].origin, "pre-existing");
   assert.equal(clonesIn(summary.families) + summary.bystanders.clones, summary.totals.clones);
 });
 
@@ -291,6 +291,11 @@ test("uncommitted and untracked files count as part of the change", (t) => {
     summary.families.map((family) => family.fragments.map((f) => f.path)),
     [["src/cart.js", "src/invoice.js", "src/order.js"], ["legacy/export_a.js", "legacy/export_b.js"]],
     "three copies of one function are one family",
+  );
+  // jscpd reports the edited copy as an exact prefix and a structural match; both predate the change.
+  assert.deepEqual(
+    summary.families.map((family) => [...new Set(family.clones.map((clone) => clone.origin))]),
+    [["introduced"], ["pre-existing-edited"]],
   );
 });
 

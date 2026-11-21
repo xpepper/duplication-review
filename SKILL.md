@@ -22,7 +22,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    ```
 
    Pass `--base` for a PR; without it the script uses the remote's default branch. It diffs from the merge base (uncommitted and untracked files included), runs jscpd over the whole tree in the languages of the changed files, and prints JSON:
-   - `families`: the candidate families of clones in which at least one fragment overlaps a changed line range. `touched` marks that fragment. Each family gives the `lines` of its largest clone, which orders the families, and lists its `fragments` (the places the copy lives, as `path`, `start` and `end`) and its `clones` (jscpd's pairs between them, with `kind`, `isNew` and `similarity`). Sides in one file that share at least half of the shorter one count as one fragment, so a fragment can span more lines than any one of its clones.
+   - `families`: the candidate families of clones in which at least one fragment overlaps a changed line range. `touched` marks that fragment. Each family gives the `lines` of its largest clone, which orders the families, and lists its `fragments` (the places the copy lives, as `path`, `start` and `end`) and its `clones` (jscpd's pairs between them, with `kind`, `origin` and `similarity`). Sides in one file that share at least half of the shorter one count as one fragment, so a fragment can span more lines than any one of its clones.
    - `bystanders`: the `count` of families the change does not touch, the number of `clones` in them, and the `largest` families. Leave them out of the verdict.
    - `totals`: clones, duplicated lines and percentage for the whole tree. Report them.
    - `jscpd`: the jscpd version that ran.
@@ -35,11 +35,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    - **Extract**: the fragments share one reason to change, and the call sites read better with the element. Name it (helper, shared struct, fixture method), using the repo's domain terms or glossary where they exist. Say where it lives, which clones it retires, and the estimated lines before and after.
    - **Tolerate**: the fragments look alike by accident, or differ in what they exist to show (a test's distinguishing step, a config struct whose fields will diverge). Say why in one line. Fewer lines alone is no reason to extract.
 
-   Separately, mark each clone's origin:
-   - **Introduced**: this change created the duplicate.
-   - **Pre-existing, edited here**: the clone predates the change and one side was edited. Check whether the other side needs the same edit.
-
-   `isNew` is a hint: editing an older clone also reads as new, so confirm with `git show <base>:<path>`, using the summary's `base`. Done when every family has a ruling and every clone an origin.
+   Take each clone's `origin` from the summary: `introduced` when the change wrote at least half of one side, `pre-existing-edited` when it edited less of an older clone, and `pre-existing` when it touched neither side. For a `pre-existing-edited` clone, check whether the other side needs the same edit. Done when every family has a ruling.
 
 4. **Report.** When `families` is empty, report `totals` and note that jscpd found no clones that the change touches. Otherwise, write one entry per family, Extract first, largest saving first:
 
@@ -47,7 +43,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    ### <element name>: Extract | Tolerate
    Would have made this change easy because: <one line>
    Lives in: <path> · Lines: <before> to <after>
-   - file:lines <> file:lines (Introduced | Pre-existing, edited here)
+   - file:lines <> file:lines (<origin>)
    ```
 
    Then the `largest` bystanders, one line each, and a count of the rest, as follow-ups.

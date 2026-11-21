@@ -89,9 +89,31 @@ function touches(range, side) {
   return range.start <= side.end && side.start <= range.end;
 }
 
+// How many of a side's lines fall in added or modified ranges. A deletion
+// leaves no lines on disk, so it adds none.
+function changedLines(ranges, side) {
+  return ranges
+    .filter((range) => !range.deletion)
+    .reduce((sum, range) => {
+      const shared = Math.min(range.end, side.end) - Math.max(range.start, side.start) + 1;
+      return sum + Math.max(0, shared);
+    }, 0);
+}
+
+// A clone is introduced when the change wrote at least half of one side.
+// Below that, the copy was there before and the change only edited it.
+function originOf(sides, changed) {
+  if (!sides.some((side) => side.touched)) return "pre-existing";
+  const introduced = sides.some(
+    (side) => changedLines(changed[side.path] ?? [], side) * 2 >= side.end - side.start + 1,
+  );
+  return introduced ? "introduced" : "pre-existing-edited";
+}
+
 /**
- * Reads jscpd's duplicates into clones that keep what the judge needs, and
- * marks each side that overlaps a changed range as touched.
+ * Reads jscpd's duplicates into clones that keep what the judge needs, marks
+ * each side that overlaps a changed range as touched, and gives each clone
+ * its origin.
  */
 export function readClones(duplicates, changed) {
   return duplicates.map((duplicate) => {
@@ -105,7 +127,7 @@ export function readClones(duplicates, changed) {
       kind: duplicate.kind,
       lines: duplicate.lines,
       tokens: duplicate.tokens,
-      isNew: duplicate.isNew,
+      origin: originOf(sides, changed),
       ...(duplicate.similarity === undefined ? {} : { similarity: duplicate.similarity }),
       sides,
     };
