@@ -341,17 +341,22 @@ function readReport(outDir, name) {
 }
 
 // Settings that make jscpd fail a CI build, or that point it at a baseline of
-// the repo's own, would clash with this scan, which only wants the report and
-// sets its own --baseline-from-ref. jscpd 5 reads only these camelCase names
-// from .jscpd.json and package.json (checked with --debug), so snake_case
-// spellings need no entry.
+// the repo's own, would clash with this scan, which only wants the report. A
+// baseline would also make jscpd scan a second tree for nothing, since the
+// script works out each clone's origin from the diff. jscpd 5.4.3 reads these
+// camelCase names from .jscpd.json and package.json, and the kebab-case
+// aliases listed here. It rejects fail-on-empty as an unknown field and does
+// not read snake_case spellings, so neither needs an entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
+  "exit-code",
   "failOnNewClones",
+  "fail-on-new-clones",
   "failOnEmpty",
   "baseline",
   "baselineFromRef",
+  "baseline-from-ref",
 ]);
 
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -412,12 +417,12 @@ function formatsOf(root, outDir, onDisk, config) {
   return Object.keys(report.statistics.formats).sort();
 }
 
-function detect(root, outDir, base, formats, config) {
+function detect(root, outDir, formats, config) {
   jscpd(root, [
     ".",
     ...config,
     "--format", formats.join(","),
-    "--similarity", "--max-gap-lines", "3", "--baseline-from-ref", base,
+    "--similarity", "--max-gap-lines", "3",
     "--reporters", "json", "--output", outDir,
   ]);
   return readReport(outDir, "jscpd-report");
@@ -437,7 +442,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const config = onDisk.length > 0 ? jscpdConfig(root, outDir) : null;
 
   const formats = config ? formatsOf(root, outDir, onDisk, config) : [];
-  const detected = formats.length > 0 ? detect(root, outDir, base, formats, config) : null;
+  const detected = formats.length > 0 ? detect(root, outDir, formats, config) : null;
   return summarize(detected?.report ?? null, changed, {
     base,
     formats,
