@@ -8,7 +8,6 @@ const clone = (first, second, extra = {}) => ({
   kind: "exact",
   lines: first[2] - first[1] + 1,
   tokens: 80,
-  isNew: false,
   firstFile: { name: first[0], start: first[1], end: first[2] },
   secondFile: { name: second[0], start: second[1], end: second[2] },
   ...extra,
@@ -133,6 +132,55 @@ test("an untracked file is changed in full", () => {
   assert.equal(only.sides[1].touched, true);
 });
 
+const originOf = (duplicate, changed) => readClones([duplicate], changed)[0].origin;
+
+test("a new file that copies an existing function introduces the clone", () => {
+  const changed = { "src/new.js": [{ start: 1, end: 12 }] };
+
+  assert.equal(originOf(clone(["src/old.js", 1, 12], ["src/new.js", 1, 12]), changed), "introduced");
+});
+
+test("an older clone with one line edited on one side is pre-existing, edited here", () => {
+  const changed = { "src/b.js": [{ start: 7, end: 7 }] };
+
+  assert.equal(originOf(clone(["src/a.js", 1, 12], ["src/b.js", 1, 12]), changed), "pre-existing-edited");
+});
+
+test("an older clone with only deletions inside it is pre-existing, edited here", () => {
+  // Each gap spans the two lines around it, but a deletion leaves no line on disk.
+  const gaps = [2, 4, 6, 8].map((start) => ({ start, end: start + 1, deletion: true }));
+  const changed = { "src/b.js": gaps };
+
+  assert.equal(originOf(clone(["src/a.js", 1, 12], ["src/b.js", 1, 12]), changed), "pre-existing-edited");
+});
+
+test("a clone with a side in an untracked file is introduced", () => {
+  const changed = { "src/new.js": [{ start: 1, end: Infinity }] };
+
+  assert.equal(originOf(clone(["src/old.js", 1, 9], ["src/new.js", 400, 408]), changed), "introduced");
+});
+
+test("a clone the change does not touch is pre-existing", () => {
+  const changed = { "src/c.js": [{ start: 1, end: 12 }] };
+
+  assert.equal(originOf(clone(["src/a.js", 1, 12], ["src/b.js", 1, 12]), changed), "pre-existing");
+});
+
+test("a side with half of its lines changed introduces the clone, and one line less does not", () => {
+  const side = ["src/b.js", 11, 20];
+  const half = { "src/b.js": [{ start: 11, end: 13 }, { start: 18, end: 19 }] };
+  const lessThanHalf = { "src/b.js": [{ start: 11, end: 13 }, { start: 18, end: 18 }] };
+
+  assert.equal(originOf(clone(["src/a.js", 1, 10], side), half), "introduced");
+  assert.equal(originOf(clone(["src/a.js", 1, 10], side), lessThanHalf), "pre-existing-edited");
+});
+
+test("changed lines outside a side do not count toward its share", () => {
+  const changed = { "src/b.js": [{ start: 1, end: 12 }] };
+
+  assert.equal(originOf(clone(["src/a.js", 1, 10], ["src/b.js", 10, 19]), changed), "pre-existing-edited");
+});
+
 test("clones in a family are ordered largest first, then by locale-independent position", () => {
   // Every clone shares the hub fragment, so all of them form one family.
   const hub = (start) => ["src/hub.js", start, start + 20];
@@ -170,7 +218,7 @@ test("each clone keeps what the judge needs and drops the rest", () => {
       kind: "exact",
       lines: 9,
       tokens: 80,
-      isNew: true,
+      origin: "pre-existing-edited",
       sides: [
         { path: "src/a.js", start: 1, end: 9, touched: true },
         { path: "src/b.js", start: 11, end: 19, touched: false },
