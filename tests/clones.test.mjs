@@ -133,27 +133,26 @@ test("an untracked file is changed in full", () => {
   assert.equal(only.sides[1].touched, true);
 });
 
-test("clones are ordered largest first, then by locale-independent position", () => {
-  const changed = { "src/a.js": [{ start: 1, end: Infinity }], "src/B.js": [{ start: 1, end: Infinity }] };
-  const small = clone(["src/a.js", 1, 5], ["src/b.js", 1, 5]);
-  const bigLate = clone(["src/a.js", 50, 70], ["src/b.js", 50, 70]);
-  const bigEarlySecondLate = clone(["src/a.js", 20, 40], ["src/b.js", 60, 80]);
-  const bigEarlySecondEarly = clone(["src/a.js", 20, 40], ["src/b.js", 20, 40]);
-  const bigUppercase = clone(["src/B.js", 20, 40], ["src/b.js", 20, 40]);
+test("clones in a family are ordered largest first, then by locale-independent position", () => {
+  // Every clone shares the hub fragment, so all of them form one family.
+  const hub = (start) => ["src/hub.js", start, start + 20];
+  const small = clone(["src/a.js", 1, 5], hub(100));
+  const bigLate = clone(["src/a.js", 50, 70], hub(100));
+  const bigEarlySecondLate = clone(["src/a.js", 20, 40], hub(101));
+  const bigEarlySecondEarly = clone(["src/a.js", 20, 40], hub(100));
+  const bigUppercase = clone(["src/B.js", 20, 40], hub(100));
 
-  const { involved } = families(
-    [small, bigLate, bigEarlySecondLate, bigEarlySecondEarly, bigUppercase],
-    changed,
-  );
+  const { bystanders } = families([small, bigLate, bigEarlySecondLate, bigEarlySecondEarly, bigUppercase]);
 
+  assert.equal(bystanders.length, 1);
   assert.deepEqual(
-    involved.flatMap((family) => family.clones).map((c) => [c.sides[0].path, c.sides[0].start, c.sides[1].start]),
+    bystanders[0].clones.map((c) => [c.sides[0].path, c.sides[0].start, c.sides[1].start]),
     [
-      ["src/B.js", 20, 20],
-      ["src/a.js", 20, 20],
-      ["src/a.js", 20, 60],
-      ["src/a.js", 50, 50],
-      ["src/a.js", 1, 1],
+      ["src/B.js", 20, 100],
+      ["src/a.js", 20, 100],
+      ["src/a.js", 20, 101],
+      ["src/a.js", 50, 100],
+      ["src/a.js", 1, 100],
     ],
   );
 });
