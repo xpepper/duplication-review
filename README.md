@@ -30,6 +30,10 @@ gh skill install xpepper/duplication-review
 
 Requires `git` and Node 22 or later (`node`, `npx`), plus `gh` when reviewing by PR number.
 
+## Versions
+
+The skill follows [semantic versioning](https://semver.org). Its version is `metadata.version` in the `SKILL.md` frontmatter, so an installed copy says which version it is. Both installers install from `main`.
+
 ## Usage
 
 The skill never triggers on its own. Run it by typing `/duplication-review` in an interactive Claude Code or Copilot CLI session. Copilot's non-interactive `copilot -p` mode cannot run it, because it does not expand the slash command.
@@ -51,3 +55,5 @@ The script pins jscpd to an exact version (`JSCPD_VERSION` in `scripts/clones.mj
 1. Read the jscpd changelog between the two versions for changes to what the script relies on: the flags `--similarity`, `--max-gap-lines` and `--report-name`; the config keys that the script strips (`baseline` and `baselineFromRef` among them), in both the camelCase and the kebab-case spelling, since jscpd reads some keys in both (see `STRIPPED_CONFIG_KEYS`); the report fields `duplicates[].firstFile` and `secondFile` (`name`, `start`, `end`), `kind`, `similarity`, `statistics.total` and `statistics.formats`; the default minimum clone size of 5 lines and 50 tokens, which a test checks; and how jscpd reports a failure (the script treats a non-zero exit or an `Error: ...` line as one).
 2. Change the constant.
 3. Run the tests.
+
+A pull request that changes the skill also bumps `metadata.version` in `SKILL.md`, using its Conventional Commit type: `feat!` or `BREAKING CHANGE` bumps the major version, `feat` the minor version, and `fix` or `perf` the patch version. A change that affects only docs, tests or CI leaves the version alone. A breaking change to the JSON summary counts as major.

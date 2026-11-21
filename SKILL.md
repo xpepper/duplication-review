@@ -4,6 +4,9 @@ description: Clone evidence for a change. Use when reviewing a diff, PR or branc
 license: MIT
 disable-model-invocation: true
 compatibility: Needs git and Node 22 or later (node, npx) to run the bundled script and jscpd; gh when given a PR number.
+metadata:
+  author: Pietro Di Bello
+  version: "1.0.0"
 allowed-tools: Bash(git *) Bash(gh pr view *) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs *) Read
 ---
 
