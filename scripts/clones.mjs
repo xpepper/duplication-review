@@ -162,7 +162,7 @@ export function candidateFamilies(clones) {
     group.clones.push(clone);
     for (const i of [2 * c, 2 * c + 1]) {
       const key = fragmentOf.find(i);
-      group.fragments.set(key, span(group.fragments.get(key), sides[i]));
+      group.fragments.set(key, widen(group.fragments.get(key), sides[i]));
     }
   });
 
@@ -189,8 +189,8 @@ function disjointSets(size) {
   return { find, union: (i, j) => void (parent[find(i)] = find(j)) };
 }
 
-// The sides that make up one fragment cover the span of all of them, touched if any is.
-function span(fragment, side) {
+// Widens a fragment to cover one more of its sides; it is touched if any side is.
+function widen(fragment, side) {
   if (!fragment) return { ...side };
   return {
     path: side.path,
@@ -404,18 +404,18 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   if (summary.formats.length === 0) return summary;
 
   const { path, report } = detect(root, outDir, base, summary.formats, config);
-  const families = candidateFamilies(readClones(report.duplicates, changed));
+  const grouped = candidateFamilies(readClones(report.duplicates, changed));
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
   return {
     ...summary,
     report: path,
     totals: { clones, duplicatedLines, percentage },
-    families: families.involved,
+    families: grouped.involved,
     bystanders: {
-      count: families.bystanders.length,
-      clones: families.bystanders.reduce((sum, family) => sum + family.clones.length, 0),
-      largest: families.bystanders.slice(0, LARGEST_BYSTANDERS),
+      count: grouped.bystanders.length,
+      clones: grouped.bystanders.reduce((sum, family) => sum + family.clones.length, 0),
+      largest: grouped.bystanders.slice(0, LARGEST_BYSTANDERS),
     },
   };
 }
