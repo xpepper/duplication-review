@@ -227,6 +227,39 @@ function byPosition(a, b) {
   return a.end - b.end;
 }
 
+/**
+ * Builds the summary from jscpd's report and the changed line ranges. With no
+ * formats to scan there is no report, and the summary is empty.
+ */
+export function summarize(report, changed, { base, formats, jscpd, reportPath }) {
+  const summary = {
+    jscpd,
+    base,
+    changedFiles: Object.keys(changed).length,
+    formats,
+    report: null,
+    totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
+    families: [],
+    bystanders: { count: 0, clones: 0, largest: [] },
+  };
+  if (formats.length === 0) return summary;
+
+  const grouped = candidateFamilies(readClones(report.duplicates, changed));
+  const { clones, duplicatedLines, percentage } = report.statistics.total;
+
+  return {
+    ...summary,
+    report: reportPath,
+    totals: { clones, duplicatedLines, percentage },
+    families: grouped.involved,
+    bystanders: {
+      count: grouped.bystanders.length,
+      clones: grouped.bystanders.reduce((sum, family) => sum + family.clones.length, 0),
+      largest: grouped.bystanders.slice(0, LARGEST_BYSTANDERS),
+    },
+  };
+}
+
 class Failure extends Error {}
 
 function git(root, ...args) {
@@ -403,33 +436,14 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const onDisk = paths.filter((path) => existsSync(join(root, path)));
   const config = onDisk.length > 0 ? jscpdConfig(root, outDir) : null;
 
-  const summary = {
-    jscpd: JSCPD_VERSION,
+  const formats = config ? formatsOf(root, outDir, onDisk, config) : [];
+  const detected = formats.length > 0 ? detect(root, outDir, base, formats, config) : null;
+  return summarize(detected?.report ?? null, changed, {
     base,
-    changedFiles: paths.length,
-    formats: config ? formatsOf(root, outDir, onDisk, config) : [],
-    report: null,
-    totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
-    families: [],
-    bystanders: { count: 0, clones: 0, largest: [] },
-  };
-  if (summary.formats.length === 0) return summary;
-
-  const { path, report } = detect(root, outDir, base, summary.formats, config);
-  const grouped = candidateFamilies(readClones(report.duplicates, changed));
-  const { clones, duplicatedLines, percentage } = report.statistics.total;
-
-  return {
-    ...summary,
-    report: path,
-    totals: { clones, duplicatedLines, percentage },
-    families: grouped.involved,
-    bystanders: {
-      count: grouped.bystanders.length,
-      clones: grouped.bystanders.reduce((sum, family) => sum + family.clones.length, 0),
-      largest: grouped.bystanders.slice(0, LARGEST_BYSTANDERS),
-    },
-  };
+    formats,
+    jscpd: JSCPD_VERSION,
+    reportPath: detected?.path,
+  });
 }
 
 const USAGE = `Usage: clones.mjs [--base <ref>]
