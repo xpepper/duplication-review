@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { candidateFamilies, parseChangedRanges, readClones } from "../scripts/clones.mjs";
+import { candidateFamilies, parseChangedRanges, readClones, summarize } from "../scripts/clones.mjs";
 
 const clone = (first, second, extra = {}) => ({
   format: "javascript",
@@ -373,4 +373,79 @@ test("a clone whose sides overlap in one file is a family of one fragment, a kno
 
   assert.deepEqual(bystanders.map(fragmentsOf), [[["src/a.js", 1, 15]]]);
   assert.equal(bystanders[0].clones.length, 1);
+});
+
+const report = (duplicates, total = {}) => ({
+  duplicates,
+  statistics: {
+    total: { clones: duplicates.length, duplicatedLines: 40, percentage: 12.5, sources: 9, ...total },
+  },
+});
+
+const options = { base: "abc123", formats: ["javascript"], jscpd: "5.4.3", reportPath: "/out/jscpd-report.json" };
+
+const clonesIn = (families) => families.reduce((sum, family) => sum + family.clones.length, 0);
+
+test("the summary names the scan it comes from", () => {
+  const changed = { "src/a.js": [{ start: 1, end: 3 }], "README.md": [{ start: 1, end: 1 }] };
+  const summary = summarize(report([]), changed, options);
+
+  assert.equal(summary.jscpd, "5.4.3");
+  assert.equal(summary.base, "abc123");
+  assert.equal(summary.changedFiles, 2);
+  assert.deepEqual(summary.formats, ["javascript"]);
+  assert.equal(summary.report, "/out/jscpd-report.json");
+});
+
+test("totals come from the report and equal the clones in families plus bystanders", () => {
+  const changed = { "src/a.js": [{ start: 1, end: 3 }] };
+  const summary = summarize(
+    report(
+      [
+        clone(["src/a.js", 1, 9], ["src/b.js", 1, 9]),
+        clone(["src/b.js", 1, 9], ["src/c.js", 1, 9]),
+        clone(["src/x.js", 1, 9], ["src/y.js", 1, 9]),
+      ],
+      { duplicatedLines: 27, percentage: 30 },
+    ),
+    changed,
+    options,
+  );
+
+  assert.deepEqual(summary.totals, { clones: 3, duplicatedLines: 27, percentage: 30 });
+  assert.equal(summary.families.length, 1);
+  assert.equal(clonesIn(summary.families) + summary.bystanders.clones, summary.totals.clones);
+});
+
+test("bystanders count every untouched family and its clones but list only the five largest", () => {
+  const changed = { "src/a.js": [{ start: 1, end: 3 }] };
+  const duplicates = [
+    clone(["src/a.js", 1, 30], ["src/b.js", 1, 30]),
+    clone(["src/x.js", 1, 9], ["src/y.js", 1, 9]),
+    clone(["src/y.js", 1, 9], ["src/z.js", 1, 9]),
+    ...[20, 19, 18, 17, 16].map((lines, i) =>
+      clone([`src/f${i}.js`, 1, lines], [`src/g${i}.js`, 1, lines]),
+    ),
+  ];
+  const { families, bystanders } = summarize(report(duplicates), changed, options);
+
+  assert.equal(families.length, 1);
+  assert.equal(bystanders.count, 6);
+  assert.equal(bystanders.clones, 7);
+  assert.deepEqual(bystanders.largest.map((family) => family.lines), [20, 19, 18, 17, 16]);
+});
+
+test("with no formats to scan the summary is empty and needs no report", () => {
+  const changed = { "assets/logo.png": [{ start: 1, end: Infinity }] };
+
+  assert.deepEqual(summarize(null, changed, { ...options, formats: [], reportPath: undefined }), {
+    jscpd: "5.4.3",
+    base: "abc123",
+    changedFiles: 1,
+    formats: [],
+    report: null,
+    totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
+    families: [],
+    bystanders: { count: 0, clones: 0, largest: [] },
+  });
 });
