@@ -112,14 +112,16 @@ export function readClones(duplicates, changed) {
   });
 }
 
-function largestFirst(a, b) {
+// Largest first, then by the position of each item in the list that `key` names.
+const largestFirst = (key) => (a, b) => {
   if (b.lines !== a.lines) return b.lines - a.lines;
-  for (let i = 0; i < a.sides.length; i++) {
-    const order = byPosition(a.sides[i], b.sides[i]);
+  const [first, second] = [a[key], b[key]];
+  for (let i = 0; i < Math.min(first.length, second.length); i++) {
+    const order = byPosition(first[i], second[i]);
     if (order !== 0) return order;
   }
-  return 0;
-}
+  return first.length - second.length;
+};
 
 // Two sides in one file are the same fragment when they share at least half of
 // the shorter one. That absorbs the small shifts between jscpd's ranges for one
@@ -172,14 +174,14 @@ export function candidateFamilies(clones) {
     const family = {
       lines: Math.max(...group.clones.map((clone) => clone.lines)),
       fragments: [...group.fragments.values()].sort(byPosition),
-      clones: group.clones.sort(largestFirst),
+      clones: group.clones.sort(largestFirst("sides")),
     };
     const touched = family.fragments.some((fragment) => fragment.touched);
     (touched ? involved : bystanders).push(family);
   }
   return {
-    involved: involved.sort(largestFamilyFirst),
-    bystanders: bystanders.sort(largestFamilyFirst),
+    involved: involved.sort(largestFirst("fragments")),
+    bystanders: bystanders.sort(largestFirst("fragments")),
   };
 }
 
@@ -204,15 +206,6 @@ function byPosition(a, b) {
   if (a.path !== b.path) return a.path < b.path ? -1 : 1;
   if (a.start !== b.start) return a.start - b.start;
   return a.end - b.end;
-}
-
-function largestFamilyFirst(a, b) {
-  if (b.lines !== a.lines) return b.lines - a.lines;
-  for (let i = 0; i < Math.min(a.fragments.length, b.fragments.length); i++) {
-    const order = byPosition(a.fragments[i], b.fragments[i]);
-    if (order !== 0) return order;
-  }
-  return a.fragments.length - b.fragments.length;
 }
 
 class Failure extends Error {}
