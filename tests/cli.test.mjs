@@ -234,8 +234,7 @@ test("exit-code gates in .jscpd.json do not fail the scan", (t) => {
   assert.equal(empty.summary.totals.clones, 0);
 });
 
-// jscpd 5 also reads these kebab-case spellings from its config (but not
-// fail-on-empty, which it rejects as an unknown field).
+// jscpd 5 also reads these kebab-case spellings from its config.
 test("kebab-case gates in .jscpd.json do not fail the scan", (t) => {
   t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
   write(
@@ -247,6 +246,27 @@ test("kebab-case gates in .jscpd.json do not fail the scan", (t) => {
 
   assert.equal(status, 0, stderr);
   assert.ok(summary.families.length >= 1);
+});
+
+// jscpd 5.4.3 calls fail-on-empty an unknown field but still applies it, and
+// a change that touches only files jscpd does not analyze scans no files.
+test("kebab-case fail-on-empty in .jscpd.json does not fail a scan of no files", (t) => {
+  t.after(() => {
+    rmSync(join(repo, ".jscpd.json"), { force: true });
+    rmSync(join(repo, "data.xyz"), { force: true });
+    rmSync(join(repo, ".git", "info", "exclude"), { force: true });
+    git("switch", "--quiet", "change");
+  });
+  git("switch", "--quiet", "main");
+  // Keep the config out of the diff, so that data.xyz is the only change.
+  write(".git/info/exclude", ".jscpd.json\n");
+  write(".jscpd.json", JSON.stringify({ "fail-on-empty": true }));
+  write("data.xyz", "not source code\n");
+
+  const { status, stderr, summary } = run();
+
+  assert.equal(status, 0, stderr);
+  assert.deepEqual(summary.formats, []);
 });
 
 test("exit-code gates under package.json's jscpd key do not fail the scan", (t) => {
