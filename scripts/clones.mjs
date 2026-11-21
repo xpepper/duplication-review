@@ -308,10 +308,11 @@ function readReport(outDir, name) {
 }
 
 // Settings that make jscpd fail a CI build, or that point it at a baseline of
-// the repo's own, would clash with this scan, which only wants the report and
-// sets its own --baseline-from-ref. jscpd 5 reads only these camelCase names
-// from .jscpd.json and package.json (checked with --debug), so snake_case
-// spellings need no entry.
+// the repo's own, would clash with this scan, which only wants the report. A
+// baseline would also make jscpd scan a second tree for nothing, since the
+// script works out each clone's origin from the diff. jscpd 5 reads only
+// these camelCase names from .jscpd.json and package.json (checked with
+// --debug), so snake_case spellings need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
@@ -384,7 +385,7 @@ function detect(root, outDir, base, formats, config) {
     ".",
     ...config,
     "--format", formats.join(","),
-    "--similarity", "--max-gap-lines", "3", "--baseline-from-ref", base,
+    "--similarity", "--max-gap-lines", "3",
     "--reporters", "json", "--output", outDir,
   ]);
   return readReport(outDir, "jscpd-report");

@@ -205,6 +205,7 @@ test("exit-code gates in .jscpd.json do not fail the scan", (t) => {
     ".jscpd.json",
     JSON.stringify({
       baseline: ".jscpd-baseline.json",
+      baselineFromRef: "no-such-ref",
       threshold: 0,
       exitCode: 2,
       failOnNewClones: 0,
