@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseChangedRanges, partitionClones, candidateFamilies } from "../scripts/clones.mjs";
+import { candidateFamilies, parseChangedRanges, readClones } from "../scripts/clones.mjs";
 
 const clone = (first, second, extra = {}) => ({
   format: "javascript",
@@ -96,54 +96,44 @@ test("paths with spaces or quoted characters come out as they are on disk", () =
   ]);
 });
 
-test("a clone is involved when either side overlaps a changed range", () => {
+const touchedSides = (clones) =>
+  clones.map((c) => c.sides.map((s) => [s.path, s.touched]));
+
+test("a side is touched when it overlaps a changed range", () => {
   const changed = { "src/a.js": [{ start: 10, end: 12 }] };
   const first = clone(["src/a.js", 5, 10], ["src/b.js", 1, 6]);
   const second = clone(["src/c.js", 1, 6], ["src/a.js", 12, 30]);
   const untouched = clone(["src/a.js", 13, 30], ["src/b.js", 40, 57]);
   const elsewhere = clone(["src/x.js", 10, 12], ["src/y.js", 10, 12]);
 
-  const { involved, bystanders } = partitionClones(
-    [first, second, untouched, elsewhere],
-    changed,
-  );
-
-  assert.deepEqual(
-    involved.map((c) => c.sides.map((s) => [s.path, s.touched])),
-    [
-      [["src/a.js", true], ["src/b.js", false]],
-      [["src/c.js", false], ["src/a.js", true]],
-    ],
-  );
-  assert.equal(bystanders.length, 2);
+  assert.deepEqual(touchedSides(readClones([first, second, untouched, elsewhere], changed)), [
+    [["src/a.js", true], ["src/b.js", false]],
+    [["src/c.js", false], ["src/a.js", true]],
+    [["src/a.js", false], ["src/b.js", false]],
+    [["src/x.js", false], ["src/y.js", false]],
+  ]);
 });
 
-test("a deletion involves a clone only when it falls inside it", () => {
+test("a deletion touches a side only when it falls inside it", () => {
   const changed = { "src/a.js": [{ start: 9, end: 10, deletion: true }] };
   const inside = clone(["src/a.js", 5, 12], ["src/b.js", 1, 8]);
   const endsAtGap = clone(["src/a.js", 1, 9], ["src/c.js", 1, 9]);
   const startsAtGap = clone(["src/a.js", 10, 20], ["src/d.js", 1, 11]);
 
-  const { involved, bystanders } = partitionClones(
-    [inside, endsAtGap, startsAtGap],
-    changed,
+  assert.deepEqual(
+    readClones([inside, endsAtGap, startsAtGap], changed).map((c) => c.sides[0].touched),
+    [true, false, false],
   );
-
-  assert.deepEqual(involved.map((c) => c.sides[1].path), ["src/b.js"]);
-  assert.equal(bystanders.length, 2);
 });
 
 test("an untracked file is changed in full", () => {
   const changed = { "src/new.js": [{ start: 1, end: Infinity }] };
-  const { involved } = partitionClones(
-    [clone(["src/old.js", 1, 9], ["src/new.js", 400, 408])],
-    changed,
-  );
+  const [only] = readClones([clone(["src/old.js", 1, 9], ["src/new.js", 400, 408])], changed);
 
-  assert.equal(involved.length, 1);
+  assert.equal(only.sides[1].touched, true);
 });
 
-test("both lists are ordered largest first, then by locale-independent position", () => {
+test("clones are ordered largest first, then by locale-independent position", () => {
   const changed = { "src/a.js": [{ start: 1, end: Infinity }], "src/B.js": [{ start: 1, end: Infinity }] };
   const small = clone(["src/a.js", 1, 5], ["src/b.js", 1, 5]);
   const bigLate = clone(["src/a.js", 50, 70], ["src/b.js", 50, 70]);
@@ -151,13 +141,13 @@ test("both lists are ordered largest first, then by locale-independent position"
   const bigEarlySecondEarly = clone(["src/a.js", 20, 40], ["src/b.js", 20, 40]);
   const bigUppercase = clone(["src/B.js", 20, 40], ["src/b.js", 20, 40]);
 
-  const { involved } = partitionClones(
+  const { involved } = families(
     [small, bigLate, bigEarlySecondLate, bigEarlySecondEarly, bigUppercase],
     changed,
   );
 
   assert.deepEqual(
-    involved.map((c) => [c.sides[0].path, c.sides[0].start, c.sides[1].start]),
+    involved.flatMap((family) => family.clones).map((c) => [c.sides[0].path, c.sides[0].start, c.sides[1].start]),
     [
       ["src/B.js", 20, 20],
       ["src/a.js", 20, 20],
@@ -170,12 +160,12 @@ test("both lists are ordered largest first, then by locale-independent position"
 
 test("each clone keeps what the judge needs and drops the rest", () => {
   const changed = { "src/a.js": [{ start: 1, end: 3 }] };
-  const { involved } = partitionClones(
+  const clones = readClones(
     [clone(["src/a.js", 1, 9], ["src/b.js", 11, 19], { isNew: true, fragment: "..." })],
     changed,
   );
 
-  assert.deepEqual(involved, [
+  assert.deepEqual(clones, [
     {
       format: "javascript",
       kind: "exact",
@@ -192,18 +182,15 @@ test("each clone keeps what the judge needs and drops the rest", () => {
 
 test("a structural match carries its similarity score", () => {
   const changed = { "src/a.js": [{ start: 1, end: 3 }] };
-  const { involved } = partitionClones(
+  const [only] = readClones(
     [clone(["src/a.js", 1, 9], ["src/b.js", 11, 19], { kind: "similar", similarity: 0.86 })],
     changed,
   );
 
-  assert.equal(involved[0].similarity, 0.86);
+  assert.equal(only.similarity, 0.86);
 });
 
-const families = (duplicates, changed = {}) => {
-  const { involved, bystanders } = partitionClones(duplicates, changed);
-  return candidateFamilies([...involved, ...bystanders]);
-};
+const families = (duplicates, changed = {}) => candidateFamilies(readClones(duplicates, changed));
 
 const fragmentsOf = (family) => family.fragments.map((f) => [f.path, f.start, f.end]);
 

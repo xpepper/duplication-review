@@ -90,20 +90,17 @@ function touches(range, side) {
 }
 
 /**
- * Splits jscpd's clones into those with a side overlapping a changed range
- * and those without. Every clone lands in exactly one list, largest first.
+ * Reads jscpd's duplicates into clones that keep what the judge needs, and
+ * marks each side that overlaps a changed range as touched.
  */
-export function partitionClones(duplicates, changed) {
-  const involved = [];
-  const bystanders = [];
-
-  for (const duplicate of duplicates) {
+export function readClones(duplicates, changed) {
+  return duplicates.map((duplicate) => {
     const sides = [duplicate.firstFile, duplicate.secondFile].map((file) => {
       const side = { path: file.name, start: file.start, end: file.end };
       const ranges = changed[side.path] ?? [];
       return { ...side, touched: ranges.some((range) => touches(range, side)) };
     });
-    const clone = {
+    return {
       format: duplicate.format,
       kind: duplicate.kind,
       lines: duplicate.lines,
@@ -112,13 +109,7 @@ export function partitionClones(duplicates, changed) {
       ...(duplicate.similarity === undefined ? {} : { similarity: duplicate.similarity }),
       sides,
     };
-    (sides.some((side) => side.touched) ? involved : bystanders).push(clone);
-  }
-
-  return {
-    involved: involved.sort(largestFirst),
-    bystanders: bystanders.sort(largestFirst),
-  };
+  });
 }
 
 function largestFirst(a, b) {
@@ -411,8 +402,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   if (summary.formats.length === 0) return summary;
 
   const { path, report } = detect(root, outDir, base, summary.formats, config);
-  const { involved, bystanders } = partitionClones(report.duplicates, changed);
-  const families = candidateFamilies([...involved, ...bystanders]);
+  const families = candidateFamilies(readClones(report.duplicates, changed));
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
   return {
