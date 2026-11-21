@@ -340,6 +340,22 @@ test("families are ordered largest first, then by position", () => {
   ]);
 });
 
+test("a family's duplicated lines sum its fragments, and order the families", () => {
+  const { bystanders } = families([
+    clone(["src/a.js", 1, 12], ["src/b.js", 1, 12]),
+    clone(["src/a.js", 1, 12], ["src/c.js", 1, 12]),
+    clone(["src/x.js", 1, 15], ["src/y.js", 1, 15]),
+  ]);
+
+  assert.deepEqual(
+    bystanders.map((family) => [family.fragments[0].path, family.lines, family.duplicatedLines]),
+    [
+      ["src/a.js", 12, 36],
+      ["src/x.js", 15, 30],
+    ],
+  );
+});
+
 test("every clone lands in exactly one family", () => {
   const changed = { "src/a.js": [{ start: 1, end: 3 }] };
   const duplicates = [

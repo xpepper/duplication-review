@@ -135,10 +135,11 @@ export function readClones(duplicates, changed) {
   });
 }
 
-// Largest first, then by the position of each item in the list that `key` names.
-const largestFirst = (key) => (a, b) => {
-  if (b.lines !== a.lines) return b.lines - a.lines;
-  const [first, second] = [a[key], b[key]];
+// Largest by the number that `sizeKey` names, then by the position of each item
+// in the list that `itemsKey` names.
+const largestFirst = (sizeKey, itemsKey) => (a, b) => {
+  if (b[sizeKey] !== a[sizeKey]) return b[sizeKey] - a[sizeKey];
+  const [first, second] = [a[itemsKey], b[itemsKey]];
   for (let i = 0; i < Math.min(first.length, second.length); i++) {
     const order = byPosition(first[i], second[i]);
     if (order !== 0) return order;
@@ -192,11 +193,12 @@ export function candidateFamilies(clones) {
 
   const families = [...groups.values()]
     .map((group) => {
-      const clones = group.clones.sort(largestFirst("sides"));
+      const clones = group.clones.sort(largestFirst("lines", "sides"));
       const fragments = [...group.fragments.values()].sort(byPosition);
-      return { lines: clones[0].lines, fragments, clones };
+      const duplicatedLines = fragments.reduce((sum, f) => sum + f.end - f.start + 1, 0);
+      return { lines: clones[0].lines, duplicatedLines, fragments, clones };
     })
-    .sort(largestFirst("fragments"));
+    .sort(largestFirst("duplicatedLines", "fragments"));
   const involved = (family) => family.fragments.some((fragment) => fragment.touched);
   return {
     involved: families.filter(involved),
