@@ -168,20 +168,17 @@ export function candidateFamilies(clones) {
     }
   });
 
-  const involved = [];
-  const bystanders = [];
-  for (const group of groups.values()) {
-    const family = {
-      lines: Math.max(...group.clones.map((clone) => clone.lines)),
-      fragments: [...group.fragments.values()].sort(byPosition),
-      clones: group.clones.sort(largestFirst("sides")),
-    };
-    const touched = family.fragments.some((fragment) => fragment.touched);
-    (touched ? involved : bystanders).push(family);
-  }
+  const families = [...groups.values()]
+    .map((group) => {
+      const clones = group.clones.sort(largestFirst("sides"));
+      const fragments = [...group.fragments.values()].sort(byPosition);
+      return { lines: clones[0].lines, fragments, clones };
+    })
+    .sort(largestFirst("fragments"));
+  const involved = (family) => family.fragments.some((fragment) => fragment.touched);
   return {
-    involved: involved.sort(largestFirst("fragments")),
-    bystanders: bystanders.sort(largestFirst("fragments")),
+    involved: families.filter(involved),
+    bystanders: families.filter((family) => !involved(family)),
   };
 }
 
