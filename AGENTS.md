@@ -20,6 +20,6 @@ How to work in this repo. For what the skill does, how to install it, and how to
 Checked against jscpd 5.4.3 with a scratch repository. Check them again after a version bump.
 
 - From `.jscpd.json`, jscpd reads some keys in both camelCase and kebab-case: `exitCode` and `exit-code`, `failOnNewClones` and `fail-on-new-clones`, `baselineFromRef` and `baseline-from-ref`. It does not read snake_case spellings.
-- It accepts `failOnEmpty` but rejects `fail-on-empty` as an unknown field.
-- An unknown or ill-typed config field prints `config file .jscpd.json: unknown field '...'` and jscpd still exits 0. The scan goes on without that setting.
+- An unknown or ill-typed config field prints `config file .jscpd.json: unknown field '...'` (or `invalid value`) and jscpd still exits 0.
+- That message does not prove jscpd ignores the key. It calls `fail-on-empty` an unknown field and still applies it: a scan that finds no files then exits 1, as with `failOnEmpty`. Test what a key does, not what jscpd says about it.
 - An `Error: ...` line (a missing path, an unsupported `--format`, an unknown baseline ref) comes with exit code 1. A bad CLI flag prints a lowercase `error:` and exits 2.
