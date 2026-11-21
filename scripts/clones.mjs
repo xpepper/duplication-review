@@ -115,11 +115,8 @@ export function readClones(duplicates, changed) {
 function largestFirst(a, b) {
   if (b.lines !== a.lines) return b.lines - a.lines;
   for (let i = 0; i < a.sides.length; i++) {
-    const first = a.sides[i];
-    const second = b.sides[i];
-    if (first.path !== second.path) return first.path < second.path ? -1 : 1;
-    if (first.start !== second.start) return first.start - second.start;
-    if (first.end !== second.end) return first.end - second.end;
+    const order = byPosition(a.sides[i], b.sides[i]);
+    if (order !== 0) return order;
   }
   return 0;
 }
