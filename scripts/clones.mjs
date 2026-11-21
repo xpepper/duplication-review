@@ -322,7 +322,8 @@ function jscpd(root, args) {
     encoding: "utf8",
   });
   if (run.error) throw new Failure(`Could not run npx: ${run.error.message}`);
-  // jscpd reports a rejected option on its output and still exits 0.
+  // jscpd 5.4.3 exits non-zero whenever it prints "Error:". The pattern check
+  // is kept as a guard in case another version prints it and exits 0.
   const output = `${run.stdout}${run.stderr}`.trim();
   if (run.signal || run.status !== 0 || /^Error:/m.test(output)) {
     throw new Failure(`jscpd failed:\n${output || `terminated by ${run.signal}`}`);
@@ -345,8 +346,8 @@ function readReport(outDir, name) {
 // baseline would also make jscpd scan a second tree for nothing, since the
 // script works out each clone's origin from the diff. jscpd 5.4.3 reads these
 // camelCase names from .jscpd.json and package.json, and the kebab-case
-// aliases listed here. It rejects fail-on-empty as an unknown field and does
-// not read snake_case spellings, so neither needs an entry.
+// aliases listed here. It calls fail-on-empty an unknown field but still
+// applies it. It does not read snake_case spellings, so they need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "threshold",
   "exitCode",
@@ -354,6 +355,7 @@ const STRIPPED_CONFIG_KEYS = new Set([
   "failOnNewClones",
   "fail-on-new-clones",
   "failOnEmpty",
+  "fail-on-empty",
   "baseline",
   "baselineFromRef",
   "baseline-from-ref",
