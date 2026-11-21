@@ -6,9 +6,9 @@ A bundled script does the mechanical part, so it comes out the same on every run
 
 1. Scope the diff and its changed line ranges.
 2. Run [jscpd](https://github.com/kucherenko/jscpd) over the whole tree, including structural matches for renamed copies.
-3. Keep the clones that overlap the diff; list the largest of the rest as follow-ups.
+3. Group the clones into candidate families (clones that share a fragment), keep the families that overlap the diff, and list the largest of the rest as follow-ups.
 
-The agent does the judging: it groups the clones into families and rules on each, extract (name the element that would have made the change easy) or tolerate (say why).
+The agent does the judging: it merges two families when one element would retire both, or splits one when no single element fits all its fragments. Then it rules on each family: extract (name the element that would have made the change easy) or tolerate (say why).
 
 Pairs with [code-refactor-review](https://github.com/xpepper/code-refactor-review), which covers the wider review lenses.
 

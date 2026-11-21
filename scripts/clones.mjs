@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Finds the clones a change is involved in: resolves the diff base, lists the
-// changed line ranges, runs jscpd over the whole tree and splits its clones
-// into those touching the change and the rest. Prints a JSON summary.
+// changed line ranges, runs jscpd over the whole tree, groups its clones into
+// families and splits them into those touching the change and the rest.
+// Prints a JSON summary.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -89,20 +90,17 @@ function touches(range, side) {
 }
 
 /**
- * Splits jscpd's clones into those with a side overlapping a changed range
- * and those without. Every clone lands in exactly one list, largest first.
+ * Reads jscpd's duplicates into clones that keep what the judge needs, and
+ * marks each side that overlaps a changed range as touched.
  */
-export function partitionClones(duplicates, changed) {
-  const involved = [];
-  const bystanders = [];
-
-  for (const duplicate of duplicates) {
+export function readClones(duplicates, changed) {
+  return duplicates.map((duplicate) => {
     const sides = [duplicate.firstFile, duplicate.secondFile].map((file) => {
       const side = { path: file.name, start: file.start, end: file.end };
       const ranges = changed[side.path] ?? [];
       return { ...side, touched: ranges.some((range) => touches(range, side)) };
     });
-    const clone = {
+    return {
       format: duplicate.format,
       kind: duplicate.kind,
       lines: duplicate.lines,
@@ -111,25 +109,99 @@ export function partitionClones(duplicates, changed) {
       ...(duplicate.similarity === undefined ? {} : { similarity: duplicate.similarity }),
       sides,
     };
-    (sides.some((side) => side.touched) ? involved : bystanders).push(clone);
-  }
+  });
+}
 
+// Largest first, then by the position of each item in the list that `key` names.
+const largestFirst = (key) => (a, b) => {
+  if (b.lines !== a.lines) return b.lines - a.lines;
+  const [first, second] = [a[key], b[key]];
+  for (let i = 0; i < Math.min(first.length, second.length); i++) {
+    const order = byPosition(first[i], second[i]);
+    if (order !== 0) return order;
+  }
+  return first.length - second.length;
+};
+
+// Two sides in one file are the same fragment when they share at least half of
+// the shorter one. That absorbs the small shifts between jscpd's ranges for one
+// copy, while a few shared edge lines do not chain unrelated clones together.
+// The rule is applied pair by pair and is transitive, so a run of sides that
+// each overlap the next by half (1-10, 6-15, 11-20) still becomes one fragment,
+// and the two sides of a clone that overlaps itself become one. The model
+// splits such a family.
+function sameFragment(a, b) {
+  if (a.path !== b.path) return false;
+  const shared = Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
+  const shorter = Math.min(a.end - a.start, b.end - b.start) + 1;
+  return shared * 2 >= shorter;
+}
+
+/**
+ * Groups clones into candidate families: fragments are nodes, clones are
+ * edges, and each connected component is a family. jscpd pairs every copy
+ * with one anchor only, so a four-way copy arrives as three clones.
+ * A family is involved when any of its clones touches the change.
+ */
+export function candidateFamilies(clones) {
+  // readClones gives every clone exactly two sides, so clone c owns sides 2c and 2c + 1.
+  const sides = clones.flatMap((clone) => clone.sides);
+  const fragmentOf = disjointSets(sides.length);
+  for (let i = 0; i < sides.length; i++) {
+    for (let j = i + 1; j < sides.length; j++) {
+      if (sameFragment(sides[i], sides[j])) fragmentOf.union(i, j);
+    }
+  }
+  // Families join fragments, so they are built over fragment roots.
+  const familyOf = disjointSets(sides.length);
+  clones.forEach((_, c) => familyOf.union(fragmentOf.find(2 * c), fragmentOf.find(2 * c + 1)));
+
+  const groups = new Map();
+  clones.forEach((clone, c) => {
+    const root = familyOf.find(fragmentOf.find(2 * c));
+    const group = groups.get(root) ?? groups.set(root, { clones: [], fragments: new Map() }).get(root);
+    group.clones.push(clone);
+    for (const i of [2 * c, 2 * c + 1]) {
+      const key = fragmentOf.find(i);
+      group.fragments.set(key, widen(group.fragments.get(key), sides[i]));
+    }
+  });
+
+  const families = [...groups.values()]
+    .map((group) => {
+      const clones = group.clones.sort(largestFirst("sides"));
+      const fragments = [...group.fragments.values()].sort(byPosition);
+      return { lines: clones[0].lines, fragments, clones };
+    })
+    .sort(largestFirst("fragments"));
+  const involved = (family) => family.fragments.some((fragment) => fragment.touched);
   return {
-    involved: involved.sort(largestFirst),
-    bystanders: bystanders.sort(largestFirst),
+    involved: families.filter(involved),
+    bystanders: families.filter((family) => !involved(family)),
   };
 }
 
-function largestFirst(a, b) {
-  if (b.lines !== a.lines) return b.lines - a.lines;
-  for (let i = 0; i < a.sides.length; i++) {
-    const first = a.sides[i];
-    const second = b.sides[i];
-    if (first.path !== second.path) return first.path < second.path ? -1 : 1;
-    if (first.start !== second.start) return first.start - second.start;
-    if (first.end !== second.end) return first.end - second.end;
-  }
-  return 0;
+function disjointSets(size) {
+  const parent = Array.from({ length: size }, (_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  return { find, union: (i, j) => void (parent[find(i)] = find(j)) };
+}
+
+// Widens a fragment to cover one more of its sides; it is touched if any side is.
+function widen(fragment, side) {
+  if (!fragment) return { ...side };
+  return {
+    path: side.path,
+    start: Math.min(fragment.start, side.start),
+    end: Math.max(fragment.end, side.end),
+    touched: fragment.touched || side.touched,
+  };
+}
+
+function byPosition(a, b) {
+  if (a.path !== b.path) return a.path < b.path ? -1 : 1;
+  if (a.start !== b.start) return a.start - b.start;
+  return a.end - b.end;
 }
 
 class Failure extends Error {}
@@ -315,23 +387,24 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
     formats: config ? formatsOf(root, outDir, onDisk, config) : [],
     report: null,
     totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
-    involved: [],
-    bystanders: { count: 0, largest: [] },
+    families: [],
+    bystanders: { count: 0, clones: 0, largest: [] },
   };
   if (summary.formats.length === 0) return summary;
 
   const { path, report } = detect(root, outDir, base, summary.formats, config);
-  const { involved, bystanders } = partitionClones(report.duplicates, changed);
+  const grouped = candidateFamilies(readClones(report.duplicates, changed));
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
   return {
     ...summary,
     report: path,
     totals: { clones, duplicatedLines, percentage },
-    involved,
+    families: grouped.involved,
     bystanders: {
-      count: bystanders.length,
-      largest: bystanders.slice(0, LARGEST_BYSTANDERS),
+      count: grouped.bystanders.length,
+      clones: grouped.bystanders.reduce((sum, family) => sum + family.clones.length, 0),
+      largest: grouped.bystanders.slice(0, LARGEST_BYSTANDERS),
     },
   };
 }
