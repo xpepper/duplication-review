@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Finds the clones a change is involved in: resolves the diff base, lists the
-// changed line ranges, runs jscpd over the whole tree and splits its clones
-// into those touching the change and the rest. Prints a JSON summary.
+// changed line ranges, runs jscpd over the whole tree, groups its clones into
+// families and splits them into those touching the change and the rest.
+// Prints a JSON summary.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -404,23 +405,25 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
     formats: config ? formatsOf(root, outDir, onDisk, config) : [],
     report: null,
     totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
-    involved: [],
-    bystanders: { count: 0, largest: [] },
+    families: [],
+    bystanders: { count: 0, clones: 0, largest: [] },
   };
   if (summary.formats.length === 0) return summary;
 
   const { path, report } = detect(root, outDir, base, summary.formats, config);
   const { involved, bystanders } = partitionClones(report.duplicates, changed);
+  const families = seedFamilies([...involved, ...bystanders]);
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
   return {
     ...summary,
     report: path,
     totals: { clones, duplicatedLines, percentage },
-    involved,
+    families: families.involved,
     bystanders: {
-      count: bystanders.length,
-      largest: bystanders.slice(0, LARGEST_BYSTANDERS),
+      count: families.bystanders.length,
+      clones: families.bystanders.reduce((sum, family) => sum + family.clones.length, 0),
+      largest: families.bystanders.slice(0, LARGEST_BYSTANDERS),
     },
   };
 }

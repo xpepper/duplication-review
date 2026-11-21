@@ -22,8 +22,8 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    ```
 
    Pass `--base` for a PR; without it the script uses the remote's default branch. It diffs from the merge base (uncommitted and untracked files included), runs jscpd over the whole tree in the languages of the changed files, and prints JSON:
-   - `involved`: clones with a side overlapping a changed line range. `touched` marks that side.
-   - `bystanders`: the `count` of clones the change does not touch, and the `largest`. Leave them out of the verdict.
+   - `families`: the candidate families of clones in which at least one fragment overlaps a changed line range. `touched` marks that fragment. Each family lists its `fragments` (the places the copy lives) and its `clones` (jscpd's pairs between them, with `kind`, `isNew` and `similarity`).
+   - `bystanders`: the `count` of families the change does not touch, the number of `clones` in them, and the `largest` families. Leave them out of the verdict.
    - `totals`: clones, duplicated lines and percentage for the whole tree. Report them.
    - `jscpd`: the jscpd version that ran.
 
@@ -31,7 +31,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
    If the script fails, relay its message. In a linked worktree the report path lives in the main repo's `.git`, outside the worktree, so a sandbox limited to the worktree may block it.
 
-3. **Group and judge.** Open both sides of every involved clone. Group clones that one element could retire into a family, because a single abstraction that retires several clones beats one helper per clone. Then rule on each family:
+3. **Group and judge.** Open every fragment of each family. Start from `families`, which joins clones that share a fragment, because a single abstraction that retires several clones beats one helper per clone. Merge two families when one element would retire both, or split one when no single element fits all its fragments, and give the reason in one line. Then rule on each family:
    - **Extract**: the sides share one reason to change, and the call sites read better with the element. Name it (helper, shared struct, fixture method), using the repo's domain terms or glossary where they exist. Say where it lives, which clones it retires, and the estimated lines before and after.
    - **Tolerate**: the sides look alike by accident, or differ in what they exist to show (a test's distinguishing step, a config struct whose fields will diverge). Say why in one line. Fewer lines alone is no reason to extract.
 
@@ -41,7 +41,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
    `isNew` is a hint: editing an older clone also reads as new, so confirm with `git show <base>:<path>`, using the summary's `base`. Done when every family has a ruling and every clone an origin.
 
-4. **Report.** When `involved` is empty, report `totals` and note that jscpd found no involved clones. Otherwise, write one entry per family, Extract first, largest saving first:
+4. **Report.** When `families` is empty, report `totals` and note that jscpd found no involved clones. Otherwise, write one entry per family, Extract first, largest saving first:
 
    ```markdown
    ### <element name>: Extract | Tolerate

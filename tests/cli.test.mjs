@@ -66,6 +66,8 @@ function write(path, content) {
   writeFileSync(join(repo, path), content);
 }
 
+const clonesIn = (families) => families.reduce((sum, family) => sum + family.clones.length, 0);
+
 function run(args = [], { cwd = repo, script = SCRIPT } = {}) {
   const result = spawnSync("node", [script, ...args], { cwd, encoding: "utf8" });
   return { ...result, summary: result.status === 0 ? JSON.parse(result.stdout) : null };
@@ -104,8 +106,8 @@ test("a branch with nothing changed reports nothing and scans nothing", (t) => {
     formats: [],
     report: null,
     totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
-    involved: [],
-    bystanders: { count: 0, largest: [] },
+    families: [],
+    bystanders: { count: 0, clones: 0, largest: [] },
   });
 });
 
@@ -123,21 +125,23 @@ test("a committed copy is involved and an old clone elsewhere is a bystander", (
   assert.equal(summary.base, base);
   assert.deepEqual(summary.formats, ["javascript"]);
   assert.deepEqual(
-    summary.involved.map((clone) => clone.sides.map((side) => [side.path, side.touched]).sort()),
+    summary.families.map((family) => family.fragments.map((f) => [f.path, f.touched])),
     [[["src/invoice.js", false], ["src/order.js", true]]],
   );
-  assert.equal(summary.involved[0].isNew, true);
+  assert.equal(summary.families[0].clones[0].isNew, true);
   assert.deepEqual(
-    summary.bystanders.largest.map((clone) => clone.sides.map((side) => side.path).sort()),
+    summary.bystanders.largest.map((family) => family.fragments.map((f) => f.path)),
     [["legacy/export_a.js", "legacy/export_b.js"]],
   );
-  assert.equal(summary.bystanders.largest[0].isNew, false);
-  assert.equal(summary.involved.length + summary.bystanders.count, summary.totals.clones);
+  assert.equal(summary.bystanders.largest[0].clones[0].isNew, false);
+  assert.equal(clonesIn(summary.families) + summary.bystanders.clones, summary.totals.clones);
 });
 
 test("only the languages of the changed files are scanned", () => {
   const { summary } = run();
-  const formats = [...summary.involved, ...summary.bystanders.largest].map((clone) => clone.format);
+  const formats = [...summary.families, ...summary.bystanders.largest]
+    .flatMap((family) => family.clones)
+    .map((clone) => clone.format);
 
   assert.deepEqual([...new Set(formats)], ["javascript"]);
   assert.equal(summary.totals.clones, 2, "the Python clone is not counted");
@@ -211,7 +215,7 @@ test("exit-code gates in .jscpd.json do not fail the scan", (t) => {
   const { status, stderr, summary } = run();
 
   assert.equal(status, 0, stderr);
-  assert.ok(summary.involved.length >= 1);
+  assert.ok(summary.families.length >= 1);
 
   write(".jscpd.json", JSON.stringify({ minLines: 50, failOnEmpty: true }));
   const empty = run();
@@ -230,7 +234,7 @@ test("exit-code gates under package.json's jscpd key do not fail the scan", (t) 
   const { status, stderr, summary } = run();
 
   assert.equal(status, 0, stderr);
-  assert.ok(summary.involved.length >= 1);
+  assert.ok(summary.families.length >= 1);
 });
 
 test("a .jscpd.json takes precedence over package.json's jscpd key, as in jscpd itself", (t) => {
@@ -275,14 +279,19 @@ test("uncommitted and untracked files count as part of the change", (t) => {
   write("src/cart.js", totalFunction("cartTotal"));
 
   const { summary } = run();
-  const touched = summary.involved.flatMap((clone) =>
-    clone.sides.filter((side) => side.touched).map((side) => side.path),
+  const touched = summary.families.flatMap((family) =>
+    family.fragments.filter((f) => f.touched).map((f) => f.path),
   );
 
   assert.ok(touched.includes("src/cart.js"), "untracked file");
   assert.ok(touched.includes("legacy/export_a.js"), "uncommitted edit");
-  assert.equal(summary.bystanders.count, 0);
-  assert.equal(summary.involved.length, summary.totals.clones);
+  assert.deepEqual(summary.bystanders, { count: 0, clones: 0, largest: [] });
+  assert.equal(clonesIn(summary.families), summary.totals.clones);
+  assert.deepEqual(
+    summary.families.map((family) => family.fragments.map((f) => f.path)),
+    [["src/cart.js", "src/invoice.js", "src/order.js"], ["legacy/export_a.js", "legacy/export_b.js"]],
+    "three copies of one function are one family",
+  );
 });
 
 test("an explicit base narrows the change to what came after it", () => {
