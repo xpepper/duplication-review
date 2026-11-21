@@ -308,3 +308,22 @@ test("every clone lands in exactly one family", () => {
   assert.equal(new Set(all).size, duplicates.length);
   assert.deepEqual([involved.length, bystanders.length], [1, 2]);
 });
+
+test("sides that each overlap the next by half chain into one fragment, a known limit", () => {
+  const { bystanders } = families([
+    clone(["src/a.js", 1, 10], ["src/b.js", 1, 10]),
+    clone(["src/a.js", 6, 15], ["src/c.js", 1, 10]),
+    clone(["src/a.js", 11, 20], ["src/d.js", 1, 10]),
+  ]);
+
+  assert.deepEqual(bystanders.map(fragmentsOf), [
+    [["src/a.js", 1, 20], ["src/b.js", 1, 10], ["src/c.js", 1, 10], ["src/d.js", 1, 10]],
+  ]);
+});
+
+test("a clone whose sides overlap in one file is a family of one fragment, a known limit", () => {
+  const { bystanders } = families([clone(["src/a.js", 1, 10], ["src/a.js", 6, 15])]);
+
+  assert.deepEqual(bystanders.map(fragmentsOf), [[["src/a.js", 1, 15]]]);
+  assert.equal(bystanders[0].clones.length, 1);
+});

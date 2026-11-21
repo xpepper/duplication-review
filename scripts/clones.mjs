@@ -124,6 +124,10 @@ function largestFirst(a, b) {
 // Two sides in one file are the same fragment when they share at least half of
 // the shorter one. That absorbs the small shifts between jscpd's ranges for one
 // copy, while a few shared edge lines do not chain unrelated clones together.
+// The rule is applied pair by pair and is transitive, so a run of sides that
+// each overlap the next by half (1-10, 6-15, 11-20) still becomes one fragment,
+// and the two sides of a clone that overlaps itself become one. The model
+// splits such a family.
 function sameFragment(a, b) {
   if (a.path !== b.path) return false;
   const shared = Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
@@ -138,6 +142,7 @@ function sameFragment(a, b) {
  * A family is involved when any of its clones touches the change.
  */
 export function candidateFamilies(clones) {
+  // readClones gives every clone exactly two sides, so clone c owns sides 2c and 2c + 1.
   const sides = clones.flatMap((clone) => clone.sides);
   const fragmentOf = disjointSets(sides.length);
   for (let i = 0; i < sides.length; i++) {
