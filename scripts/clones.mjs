@@ -135,10 +135,11 @@ export function readClones(duplicates, changed) {
   });
 }
 
-// Largest `size` first, then by the position of each item in the list that `key` names.
-const largestFirst = (size, key) => (a, b) => {
-  if (b[size] !== a[size]) return b[size] - a[size];
-  const [first, second] = [a[key], b[key]];
+// Largest by the number that `sizeKey` names, then by the position of each item
+// in the list that `itemsKey` names.
+const largestFirst = (sizeKey, itemsKey) => (a, b) => {
+  if (b[sizeKey] !== a[sizeKey]) return b[sizeKey] - a[sizeKey];
+  const [first, second] = [a[itemsKey], b[itemsKey]];
   for (let i = 0; i < Math.min(first.length, second.length); i++) {
     const order = byPosition(first[i], second[i]);
     if (order !== 0) return order;
