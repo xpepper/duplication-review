@@ -132,6 +132,95 @@ function largestFirst(a, b) {
   return 0;
 }
 
+// Two sides in one file are the same fragment when they share at least half of
+// the shorter one. That absorbs the small shifts between jscpd's ranges for one
+// copy, while a few shared edge lines do not chain unrelated clones together.
+function sameFragment(a, b) {
+  if (a.path !== b.path) return false;
+  const shared = Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
+  const shorter = Math.min(a.end - a.start, b.end - b.start) + 1;
+  return shared * 2 >= shorter;
+}
+
+/**
+ * Groups clones into candidate families: fragments are nodes, clones are
+ * edges, and each connected component is a family. jscpd pairs every copy
+ * with one anchor only, so a four-way copy arrives as three clones.
+ * A family is involved when any of its clones touches the change.
+ */
+export function seedFamilies(clones) {
+  const sides = clones.flatMap((clone) => clone.sides);
+  const fragmentOf = disjointSets(sides.length);
+  for (let i = 0; i < sides.length; i++) {
+    for (let j = i + 1; j < sides.length; j++) {
+      if (sameFragment(sides[i], sides[j])) fragmentOf.union(i, j);
+    }
+  }
+  const familyOf = disjointSets(sides.length);
+  for (let i = 0; i < sides.length; i++) familyOf.union(i, fragmentOf.find(i));
+  clones.forEach((_, c) => familyOf.union(2 * c, 2 * c + 1));
+
+  const groups = new Map();
+  clones.forEach((clone, c) => {
+    const root = familyOf.find(2 * c);
+    if (!groups.has(root)) groups.set(root, { clones: [], fragments: new Map() });
+    const group = groups.get(root);
+    group.clones.push(clone);
+    for (const i of [2 * c, 2 * c + 1]) {
+      const key = fragmentOf.find(i);
+      group.fragments.set(key, span(group.fragments.get(key), sides[i]));
+    }
+  });
+
+  const involved = [];
+  const bystanders = [];
+  for (const group of groups.values()) {
+    const family = {
+      lines: Math.max(...group.clones.map((clone) => clone.lines)),
+      fragments: [...group.fragments.values()].sort(byPosition),
+      clones: group.clones.sort(largestFirst),
+    };
+    const touched = family.fragments.some((fragment) => fragment.touched);
+    (touched ? involved : bystanders).push(family);
+  }
+  return {
+    involved: involved.sort(largestFamilyFirst),
+    bystanders: bystanders.sort(largestFamilyFirst),
+  };
+}
+
+function disjointSets(size) {
+  const parent = Array.from({ length: size }, (_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  return { find, union: (i, j) => void (parent[find(i)] = find(j)) };
+}
+
+// The sides that make up one fragment cover the span of all of them, touched if any is.
+function span(fragment, side) {
+  if (!fragment) return { ...side };
+  return {
+    path: side.path,
+    start: Math.min(fragment.start, side.start),
+    end: Math.max(fragment.end, side.end),
+    touched: fragment.touched || side.touched,
+  };
+}
+
+function byPosition(a, b) {
+  if (a.path !== b.path) return a.path < b.path ? -1 : 1;
+  if (a.start !== b.start) return a.start - b.start;
+  return a.end - b.end;
+}
+
+function largestFamilyFirst(a, b) {
+  if (b.lines !== a.lines) return b.lines - a.lines;
+  for (let i = 0; i < Math.min(a.fragments.length, b.fragments.length); i++) {
+    const order = byPosition(a.fragments[i], b.fragments[i]);
+    if (order !== 0) return order;
+  }
+  return a.fragments.length - b.fragments.length;
+}
+
 class Failure extends Error {}
 
 function git(root, ...args) {

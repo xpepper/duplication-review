@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseChangedRanges, partitionClones } from "../scripts/clones.mjs";
+import { parseChangedRanges, partitionClones, seedFamilies } from "../scripts/clones.mjs";
 
 const clone = (first, second, extra = {}) => ({
   format: "javascript",
@@ -198,4 +198,126 @@ test("a structural match carries its similarity score", () => {
   );
 
   assert.equal(involved[0].similarity, 0.86);
+});
+
+const families = (duplicates, changed = {}) => {
+  const { involved, bystanders } = partitionClones(duplicates, changed);
+  return seedFamilies([...involved, ...bystanders]);
+};
+
+const fragmentsOf = (family) => family.fragments.map((f) => [f.path, f.start, f.end]);
+
+test("one copy reported against one anchor three times is one family of four fragments", () => {
+  const changed = { "src/cart.js": [{ start: 1, end: Infinity }] };
+  const { involved, bystanders } = families(
+    [
+      clone(["src/cart.js", 1, 12], ["src/invoice.js", 1, 12]),
+      clone(["src/cart.js", 1, 12], ["src/order.js", 1, 12]),
+      clone(["src/cart.js", 1, 12], ["src/quote.js", 1, 12]),
+    ],
+    changed,
+  );
+
+  assert.equal(bystanders.length, 0);
+  assert.equal(involved.length, 1);
+  assert.equal(involved[0].lines, 12);
+  assert.equal(involved[0].clones.length, 3);
+  assert.deepEqual(involved[0].fragments, [
+    { path: "src/cart.js", start: 1, end: 12, touched: true },
+    { path: "src/invoice.js", start: 1, end: 12, touched: false },
+    { path: "src/order.js", start: 1, end: 12, touched: false },
+    { path: "src/quote.js", start: 1, end: 12, touched: false },
+  ]);
+});
+
+test("two unrelated clones are two families", () => {
+  const { bystanders } = families([
+    clone(["src/a.js", 1, 9], ["src/b.js", 1, 9]),
+    clone(["src/c.js", 1, 9], ["src/d.js", 1, 9]),
+  ]);
+
+  assert.deepEqual(bystanders.map(fragmentsOf), [
+    [["src/a.js", 1, 9], ["src/b.js", 1, 9]],
+    [["src/c.js", 1, 9], ["src/d.js", 1, 9]],
+  ]);
+});
+
+test("clones at separate places in one file stay separate families", () => {
+  const { bystanders } = families([
+    clone(["src/a.js", 1, 9], ["src/b.js", 1, 9]),
+    clone(["src/a.js", 20, 28], ["src/c.js", 1, 9]),
+  ]);
+
+  assert.equal(bystanders.length, 2);
+});
+
+test("fragments in one file are one when they share at least half of the shorter one", () => {
+  const { bystanders } = families([
+    clone(["src/a.js", 1, 10], ["src/b.js", 1, 10]),
+    clone(["src/a.js", 6, 20], ["src/c.js", 1, 15]),
+  ]);
+
+  assert.equal(bystanders.length, 1);
+  assert.deepEqual(fragmentsOf(bystanders[0]), [
+    ["src/a.js", 1, 20],
+    ["src/b.js", 1, 10],
+    ["src/c.js", 1, 15],
+  ]);
+});
+
+test("a small overlap does not chain clones into one family", () => {
+  const { bystanders } = families([
+    clone(["src/a.js", 1, 10], ["src/b.js", 1, 10]),
+    clone(["src/a.js", 9, 30], ["src/c.js", 1, 22]),
+    clone(["src/a.js", 29, 40], ["src/d.js", 1, 12]),
+  ]);
+
+  assert.equal(bystanders.length, 3);
+});
+
+test("a clone the change does not touch joins the family of a clone it does", () => {
+  const changed = { "src/cart.js": [{ start: 1, end: Infinity }] };
+  const { involved, bystanders } = families(
+    [
+      clone(["src/cart.js", 1, 12], ["src/invoice.js", 1, 12]),
+      clone(["src/invoice.js", 1, 12], ["src/order.js", 1, 12]),
+    ],
+    changed,
+  );
+
+  assert.equal(bystanders.length, 0);
+  assert.equal(involved.length, 1);
+  assert.equal(involved[0].clones.length, 2);
+});
+
+test("families are ordered largest first, then by position", () => {
+  const { bystanders } = families([
+    clone(["src/c.js", 1, 5], ["src/d.js", 1, 5]),
+    clone(["src/b.js", 1, 20], ["src/c.js", 30, 49]),
+    clone(["src/B.js", 1, 20], ["src/e.js", 1, 20]),
+    clone(["src/a.js", 1, 5], ["src/e.js", 30, 34]),
+  ]);
+
+  assert.deepEqual(bystanders.map((family) => family.fragments[0].path), [
+    "src/B.js",
+    "src/b.js",
+    "src/a.js",
+    "src/c.js",
+  ]);
+});
+
+test("every clone lands in exactly one family", () => {
+  const changed = { "src/a.js": [{ start: 1, end: 3 }] };
+  const duplicates = [
+    clone(["src/a.js", 1, 9], ["src/b.js", 1, 9]),
+    clone(["src/b.js", 1, 9], ["src/c.js", 1, 9]),
+    clone(["src/x.js", 1, 9], ["src/y.js", 1, 9]),
+    clone(["src/x.js", 40, 48], ["src/z.js", 1, 9]),
+  ];
+  const { involved, bystanders } = families(duplicates, changed);
+  const all = [...involved, ...bystanders].flatMap((family) => family.clones);
+
+  assert.equal(all.length, duplicates.length);
+  assert.equal(new Set(all).size, duplicates.length);
+  assert.deepEqual([involved.length, bystanders.length], [1, 2]);
 });
