@@ -380,7 +380,7 @@ function formatsOf(root, outDir, onDisk, config) {
   return Object.keys(report.statistics.formats).sort();
 }
 
-function detect(root, outDir, base, formats, config) {
+function detect(root, outDir, formats, config) {
   jscpd(root, [
     ".",
     ...config,
@@ -416,7 +416,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   };
   if (summary.formats.length === 0) return summary;
 
-  const { path, report } = detect(root, outDir, base, summary.formats, config);
+  const { path, report } = detect(root, outDir, summary.formats, config);
   const grouped = candidateFamilies(readClones(report.duplicates, changed));
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
