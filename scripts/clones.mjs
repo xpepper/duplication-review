@@ -91,7 +91,7 @@ function touches(range, side) {
 
 // How many of a side's lines fall in added or modified ranges. A deletion
 // leaves no lines on disk, so it adds none.
-function changedLines(ranges, side) {
+function changedLineCount(ranges, side) {
   return ranges
     .filter((range) => !range.deletion)
     .reduce((sum, range) => {
@@ -102,11 +102,9 @@ function changedLines(ranges, side) {
 
 // A clone is introduced when the change wrote at least half of one side.
 // Below that, the copy was there before and the change only edited it.
-function originOf(sides, changed) {
-  if (!sides.some((side) => side.touched)) return "pre-existing";
-  const introduced = sides.some(
-    (side) => changedLines(changed[side.path] ?? [], side) * 2 >= side.end - side.start + 1,
-  );
+function originOf(located) {
+  if (!located.some(({ side }) => side.touched)) return "pre-existing";
+  const introduced = located.some(({ side, written }) => written * 2 >= side.end - side.start + 1);
   return introduced ? "introduced" : "pre-existing-edited";
 }
 
@@ -117,19 +115,22 @@ function originOf(sides, changed) {
  */
 export function readClones(duplicates, changed) {
   return duplicates.map((duplicate) => {
-    const sides = [duplicate.firstFile, duplicate.secondFile].map((file) => {
+    const located = [duplicate.firstFile, duplicate.secondFile].map((file) => {
       const side = { path: file.name, start: file.start, end: file.end };
       const ranges = changed[side.path] ?? [];
-      return { ...side, touched: ranges.some((range) => touches(range, side)) };
+      return {
+        side: { ...side, touched: ranges.some((range) => touches(range, side)) },
+        written: changedLineCount(ranges, side),
+      };
     });
     return {
       format: duplicate.format,
       kind: duplicate.kind,
       lines: duplicate.lines,
       tokens: duplicate.tokens,
-      origin: originOf(sides, changed),
+      origin: originOf(located),
       ...(duplicate.similarity === undefined ? {} : { similarity: duplicate.similarity }),
-      sides,
+      sides: located.map(({ side }) => side),
     };
   });
 }

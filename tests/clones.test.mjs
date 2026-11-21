@@ -8,7 +8,6 @@ const clone = (first, second, extra = {}) => ({
   kind: "exact",
   lines: first[2] - first[1] + 1,
   tokens: 80,
-  isNew: false,
   firstFile: { name: first[0], start: first[1], end: first[2] },
   secondFile: { name: second[0], start: second[1], end: second[2] },
   ...extra,
