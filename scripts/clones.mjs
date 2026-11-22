@@ -373,8 +373,8 @@ const isObject = (value) => Boolean(value) && typeof value === "object" && !Arra
 /**
  * Discovers the repository's jscpd config in jscpd's own precedence order:
  * .jscpd.json, .config/jscpd.json, .config/.jscpd.json, then package.json's
- * jscpd key. Returns both the parsed config and its source location, or null
- * when no config applies.
+ * jscpd key. Returns the parsed config and its source, relative to root, or
+ * null when no config applies.
  */
 export function repoConfig(root) {
   for (const source of CONFIG_FILES) {
@@ -387,13 +387,13 @@ export function repoConfig(root) {
       throw new Failure(`Invalid ${source}: ${error.message}`);
     }
     if (!isObject(config)) throw new Failure(`Invalid ${source}: expected a JSON object.`);
-    return { source, path, config };
+    return { source, config };
   }
   const path = join(root, "package.json");
   if (!existsSync(path)) return null;
   try {
     const { jscpd } = JSON.parse(readFileSync(path, "utf8")) ?? {};
-    return isObject(jscpd) ? { source: "package.json", path, config: jscpd } : null;
+    return isObject(jscpd) ? { source: "package.json", config: jscpd } : null;
   } catch {
     return null; // jscpd ignores a package.json it cannot parse, so the scan does too.
   }

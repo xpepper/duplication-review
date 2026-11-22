@@ -485,7 +485,7 @@ test("repoConfig returns null when no config file exists", (t) => {
   assert.equal(repoConfig(dir), null);
 });
 
-test("repoConfig follows jscpd's precedence order and preserves source location", (t) => {
+test("repoConfig follows jscpd's precedence order and names its source", (t) => {
   const { dir, write } = tempDir(t);
   write(".jscpd.json", JSON.stringify({ minLines: 11 }));
   write(".config/jscpd.json", JSON.stringify({ minLines: 12 }));
@@ -494,28 +494,24 @@ test("repoConfig follows jscpd's precedence order and preserves source location"
 
   assert.deepEqual(repoConfig(dir), {
     source: ".jscpd.json",
-    path: join(dir, ".jscpd.json"),
     config: { minLines: 11 },
   });
 
   rmSync(join(dir, ".jscpd.json"));
   assert.deepEqual(repoConfig(dir), {
     source: ".config/jscpd.json",
-    path: join(dir, ".config/jscpd.json"),
     config: { minLines: 12 },
   });
 
   rmSync(join(dir, ".config/jscpd.json"));
   assert.deepEqual(repoConfig(dir), {
     source: ".config/.jscpd.json",
-    path: join(dir, ".config/.jscpd.json"),
     config: { minLines: 13 },
   });
 
   rmSync(join(dir, ".config/.jscpd.json"));
   assert.deepEqual(repoConfig(dir), {
     source: "package.json",
-    path: join(dir, "package.json"),
     config: { minLines: 14 },
   });
 });
@@ -527,7 +523,6 @@ test("repoConfig does not fall through from an empty higher-priority config", (t
 
   assert.deepEqual(repoConfig(dir), {
     source: ".config/jscpd.json",
-    path: join(dir, ".config/jscpd.json"),
     config: {},
   });
 });
