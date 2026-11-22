@@ -352,19 +352,27 @@ function readReport(outDir, name) {
 // deadCode and kind settings change what jscpd scans for. semantic fails the
 // scan on a machine without an embedding model, deadCode makes jscpd write a
 // dead-code report instead of a clone report, and kind drops the clones of
-// other kinds (or fails the scan when it is not a list). jscpd 5.4.3 reads
-// these camelCase names from .jscpd.json, .config/jscpd.json,
-// .config/.jscpd.json and package.json, and the kebab-case aliases listed
-// here. It calls fail-on-empty an unknown field but still applies it. It does
-// not read snake_case spellings, or any other spelling of absolute, semantic
-// or kind (semanticEnabled, semantic-enabled and kinds were tried), so they
-// need no entry.
+// other kinds (or fails the scan when it is not a list). The history and
+// historySince settings make jscpd rescan past commits in temporary worktrees,
+// which slows both scans and adds a history field to the report that the
+// script does not read. A range or date that selects no commits fails the
+// scan. historyEvery and historyLimit only sample those commits and do nothing
+// on their own, so they need no entry. jscpd 5.4.3 reads these camelCase
+// names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json and
+// package.json, and the kebab-case aliases listed here. It calls fail-on-empty
+// an unknown field but still applies it. It does not read snake_case
+// spellings (history_since was tried), or any other spelling of absolute,
+// semantic or kind (semanticEnabled, semantic-enabled and kinds were tried),
+// so they need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "absolute",
   "semantic",
   "deadCode",
   "dead-code",
   "kind",
+  "history",
+  "historySince",
+  "history-since",
   "threshold",
   "exitCode",
   "exit-code",
