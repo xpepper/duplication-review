@@ -68,8 +68,8 @@ function write(path, content) {
 
 const clonesIn = (families) => families.reduce((sum, family) => sum + family.clones.length, 0);
 
-function run(args = [], { cwd = repo, script = SCRIPT } = {}) {
-  const result = spawnSync("node", [script, ...args], { cwd, encoding: "utf8" });
+function run(args = [], { cwd = repo, script = SCRIPT, env = process.env } = {}) {
+  const result = spawnSync("node", [script, ...args], { cwd, env, encoding: "utf8" });
   return { ...result, summary: result.status === 0 ? JSON.parse(result.stdout) : null };
 }
 
@@ -342,6 +342,44 @@ for (const source of [".jscpd.json", ".config/jscpd.json", ".config/.jscpd.json"
     assert.equal(throughSymlink.status, 0, throughSymlink.stderr);
     assert.deepEqual(throughSymlink.summary, plain.summary);
   });
+}
+
+// Each of these settings switches jscpd 5.4.3 away from the scan the script
+// wants. semantic fails the scan unless a model is downloaded, deadCode makes
+// jscpd write a dead-code report instead of a clone report, and kind drops
+// clones of the other kinds. A kind that is not a list fails the scan. The
+// empty JSCPD_CACHE_DIR hides any model the developer has downloaded, so
+// semantic fails the same way on every machine and never downloads one.
+const MODE_SETTINGS = [
+  { semantic: true },
+  { semantic: { enabled: true } },
+  { deadCode: true },
+  { "dead-code": true },
+  { kind: ["renamed"] },
+  { kind: "renamed" },
+];
+
+for (const source of [".jscpd.json", "package.json"]) {
+  for (const setting of MODE_SETTINGS) {
+    test(`${JSON.stringify(setting)} in ${source} does not change the summary`, (t) => {
+      const cache = mkdtempSync(join(tmpdir(), "clones-jscpd-cache-"));
+      t.after(() => {
+        rmSync(join(repo, source), { force: true });
+        rmSync(cache, { recursive: true, force: true });
+      });
+      const env = { ...process.env, JSCPD_CACHE_DIR: cache };
+      write(source, JSON.stringify(configBody(source, {})));
+      const plain = run([], { env });
+      assert.equal(plain.status, 0, plain.stderr);
+      assert.ok(plain.summary.totals.clones >= 1);
+
+      write(source, JSON.stringify(configBody(source, setting)));
+      const withSetting = run([], { env });
+
+      assert.equal(withSetting.status, 0, withSetting.stderr);
+      assert.deepEqual(withSetting.summary, plain.summary);
+    });
+  }
 }
 
 for (const dotConfig of [".config/jscpd.json", ".config/.jscpd.json"]) {
