@@ -81,6 +81,66 @@ ${extra ? `  ${extra}\n` : ""}  server.use(helmet());
 }
 `;
 
+// A test whose setup builds a cart, with the item prices as given.
+const cartTest = (prices = [2.5, 12, 30]) => `import { test } from "node:test";
+import assert from "node:assert/strict";
+import { cartTotal } from "../src/cart.js";
+
+test("a cart under the free shipping limit pays shipping", () => {
+  const items = [
+    { name: "pen", price: ${prices[0]}, quantity: 4 },
+    { name: "book", price: ${prices[1]}, quantity: 1 },
+    { name: "bag", price: ${prices[2]}, quantity: 2 },
+  ];
+  const taxRate = 0.2;
+  const result = cartTotal(items, taxRate);
+  assert.equal(result.subtotal, 82);
+  assert.equal(result.tax, 16.4);
+  assert.equal(result.shipping, 9.99);
+  assert.equal(result.total, 108.39);
+});
+`;
+
+// cartTest with every name changed. jscpd leaves test files out of its
+// syntax-tree matching, so only a scan with names normalized finds this copy.
+const basketTest = `import { test } from "node:test";
+import assert from "node:assert/strict";
+import { quoteSum } from "../src/basket.js";
+
+test("a basket under the free postage limit pays postage", () => {
+  const lines = [
+    { label: "pen", cost: 2.5, count: 4 },
+    { label: "book", cost: 12, count: 1 },
+    { label: "bag", cost: 30, count: 2 },
+  ];
+  const vat = 0.2;
+  const quote = quoteSum(lines, vat);
+  assert.equal(quote.net, 82);
+  assert.equal(quote.levy, 16.4);
+  assert.equal(quote.postage, 9.99);
+  assert.equal(quote.total, 108.39);
+});
+`;
+
+// A TypeScript class, with a decorator on its first method when one is given.
+const priceController = (decorator) => `export class PriceController {
+  constructor(private readonly repository: PriceRepository, private readonly clock: Clock) {}
+${decorator ? `  ${decorator}\n` : ""}  current(sku: string): number {
+    const entry = this.repository.find(sku);
+    if (!entry) {
+      throw new Error("unknown sku " + sku);
+    }
+    const now = this.clock.now();
+    const active = entry.prices.filter((p) => p.from <= now && now < p.until);
+    return active.length > 0 ? active[0].amount : entry.fallback;
+  }
+  history(sku: string): number[] {
+    const entry = this.repository.find(sku);
+    return entry ? entry.prices.map((p) => p.amount) : [];
+  }
+}
+`;
+
 let repo;
 let base;
 
@@ -475,6 +535,57 @@ for (const source of [".jscpd.json", "package.json"]) {
       assert.equal(git("status", "--short", "--untracked-files=all"), `?? ${source}`);
     });
   }
+}
+
+// With identifiers, literals or annotations normalized, jscpd 5.4.3 pairs each
+// copy with one anchor, so a normalized copy that sorts first takes the place
+// of an exact pair. In this fixture basket.test.js renames cart.test.js,
+// bulk.test.js changes its prices, and a_controller.ts adds a decorator.
+const NORMALIZATION_SETTINGS = [
+  { ignoreIdentifiers: true },
+  { "ignore-identifiers": true },
+  { ignoreLiterals: true },
+  { "ignore-literals": true },
+  { ignoreAnnotations: true },
+  { "ignore-annotations": true },
+];
+
+const NORMALIZATION_FIXTURE = {
+  "tests/basket.test.js": basketTest,
+  "tests/bulk.test.js": cartTest([3.5, 14, 35]),
+  "tests/cart.test.js": cartTest(),
+  "tests/copy.test.js": cartTest(),
+  "src/a_controller.ts": priceController('@Get(":sku")'),
+  "src/b_controller.ts": priceController(),
+  "src/c_controller.ts": priceController(),
+};
+
+const hasClone = (summary, kind, paths) =>
+  summary.families
+    .flatMap((family) => family.clones)
+    .some((clone) => clone.kind === kind && clone.sides.map((side) => side.path).join() === paths.join());
+
+for (const source of [".jscpd.json", "package.json"]) {
+  test(`identifier, literal and annotation settings in ${source} keep exact pairs exact`, (t) => {
+    t.after(() => {
+      rmSync(join(repo, source), { force: true });
+      Object.keys(NORMALIZATION_FIXTURE).forEach((path) => rmSync(join(repo, path), { force: true }));
+    });
+    Object.entries(NORMALIZATION_FIXTURE).forEach(([path, content]) => write(path, content));
+    write(source, JSON.stringify(configBody(source, {})));
+    const plain = run();
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.ok(hasClone(plain.summary, "exact", ["tests/cart.test.js", "tests/copy.test.js"]));
+    assert.ok(hasClone(plain.summary, "exact", ["src/b_controller.ts", "src/c_controller.ts"]));
+
+    for (const setting of NORMALIZATION_SETTINGS) {
+      write(source, JSON.stringify(configBody(source, setting)));
+      const withSetting = run();
+
+      assert.equal(withSetting.status, 0, withSetting.stderr);
+      assert.deepEqual(withSetting.summary, plain.summary, JSON.stringify(setting));
+    }
+  });
 }
 
 for (const dotConfig of [".config/jscpd.json", ".config/.jscpd.json"]) {

@@ -358,13 +358,18 @@ function readReport(outDir, name) {
 // which slows both scans and adds a history field to the report that the
 // script does not read. A range or date that selects no commits fails the
 // scan. historyEvery and historyLimit only sample those commits and do nothing
-// on their own, so they need no entry. jscpd 5.4.3 reads these camelCase
+// on their own, so they need no entry. The ignoreIdentifiers, ignoreLiterals
+// and ignoreAnnotations settings make jscpd match code after normalizing names,
+// literals or decorators. It then pairs each copy with one anchor, so a
+// normalized copy that sorts first takes the place of an exact pair, and the
+// summary loses its strongest evidence. jscpd 5.4.3 reads these camelCase
 // names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json and
 // package.json, and the kebab-case aliases listed here. It calls fail-on-empty
 // an unknown field but still applies it. It does not read snake_case
-// spellings (history_since was tried), or any other spelling of absolute,
-// semantic or kind (semanticEnabled, semantic-enabled and kinds were tried),
-// so they need no entry.
+// spellings (history_since, ignore_identifiers, ignore_literals and
+// ignore_annotations were tried), or any other spelling of absolute, semantic
+// or kind (semanticEnabled, semantic-enabled and kinds were tried), so they
+// need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "absolute",
   "semantic",
@@ -374,6 +379,12 @@ const STRIPPED_CONFIG_KEYS = new Set([
   "history",
   "historySince",
   "history-since",
+  "ignoreIdentifiers",
+  "ignore-identifiers",
+  "ignoreLiterals",
+  "ignore-literals",
+  "ignoreAnnotations",
+  "ignore-annotations",
   "threshold",
   "exitCode",
   "exit-code",

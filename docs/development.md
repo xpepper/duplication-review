@@ -24,7 +24,7 @@ The script pins `jscpd` to an exact version (`JSCPD_VERSION` in [scripts/clones.
 1. Read the `jscpd` changelog between the two versions and check everything the script relies on:
    - CLI flags: `--similarity`, `--max-gap-lines`, and `--report-name`.
    - Config auto-discovery order: `.jscpd.json`, `.config/jscpd.json`, `.config/.jscpd.json`, then the `jscpd` key in `package.json`.
-   - Stripped config keys (`STRIPPED_CONFIG_KEYS`): `baseline`, `baselineFromRef`, `absolute`, `semantic`, `deadCode`, `kind`, `history`, `historySince`, and the CI exit-code gates, in both camelCase and kebab-case spellings where `jscpd` reads them.
+   - Stripped config keys (`STRIPPED_CONFIG_KEYS`): `baseline`, `baselineFromRef`, `absolute`, `semantic`, `deadCode`, `kind`, `history`, `historySince`, `ignoreIdentifiers`, `ignoreLiterals`, `ignoreAnnotations`, and the CI exit-code gates, in both camelCase and kebab-case spellings where `jscpd` reads them.
    - JSON report fields: `duplicates[].firstFile` and `secondFile` (`name`, `start`, `end`), `kind`, `method`, `similarity`, `statistics.total`, and `statistics.formats`.
    - Default minimum clone size: 5 lines and 50 tokens, which a test in `tests/cli.test.mjs` checks.
    - Failure reporting: the script treats a non-zero exit status or an `Error: ...` line as a failure.
