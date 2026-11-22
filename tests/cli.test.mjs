@@ -302,7 +302,12 @@ test("exit-code gates under package.json's jscpd key do not fail the scan", (t) 
 });
 
 // With "absolute": true, jscpd reports absolute paths. Those match none of the
-// changed files, so every family would turn into a bystander.
+// changed files, so every family would turn into a bystander. The space in
+// the copy's name and the run through a symlinked checkout come from the
+// acceptance criteria of #46, and both pass without the fix. They guard
+// against a different fix, one that would rewrite jscpd's absolute paths
+// relative to the working directory. That rewrite can go wrong for a path
+// with a space or for a working directory reached through a symlink.
 const asFile = (config) => config;
 const asManifest = (config) => ({ name: "fixture", jscpd: config });
 for (const [source, wrap] of [
