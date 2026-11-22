@@ -33,6 +33,8 @@ The script keeps project settings such as `ignore` globs and `minLines` or `minT
 | `semantic`, `deadCode` / `dead-code`, `kind` | `semantic` fails without a downloaded embedding model, `deadCode` writes a dead-code report instead of a clone report, and `kind` filters out other clone kinds (or fails the scan if its value is not a list). |
 | `history`, `historySince` / `history-since` | History mode rescans past commits in temporary worktrees, which slows both scans, and it fails when the range or date selects no commits. The script reads none of the history it adds to the report. |
 
+`jscpd` parses a file given with `--config` strictly, and the script passes the sanitized copy that way. So a value of the wrong type in the repository's config, such as `{"minLines": "x"}`, fails the review, although `jscpd` run on its own only warns about it and goes on scanning. The error names the repository's config file and the bad value, but not the field. To find the field, run `npx jscpd@<JSCPD_VERSION> .` in the repository and read its `invalid value for '...'` warning. Then fix the value in the repository's config and run the review again.
+
 ## 3. Clone origins
 
 For each duplicate pair that `jscpd` reports, the script checks both sides against the changed line ranges and assigns an `origin`:

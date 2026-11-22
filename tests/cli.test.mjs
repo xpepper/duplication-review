@@ -626,6 +626,22 @@ test("a .jscpd.json that is not valid JSON fails with a message", (t) => {
   assert.match(stderr, /Invalid \.jscpd\.json:/);
 });
 
+// jscpd only warns about this value in a file it discovers itself, but the
+// script passes the sanitized copy with --config, which jscpd parses strictly.
+test("a .jscpd.json value of the wrong type fails with a message that names the file and the value", (t) => {
+  t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
+  write(".jscpd.json", JSON.stringify({ minLines: "x" }));
+
+  const { status, stderr } = run();
+
+  assert.equal(status, 1);
+  assert.match(stderr, /"x"/);
+  const lastLine = stderr.trimEnd().split("\n").at(-1);
+  assert.match(lastLine, /\.jscpd\.json/);
+  assert.ok(lastLine.includes(join(repo, ".git", "jscpd-out", "config.json")), lastLine);
+  assert.doesNotMatch(lastLine, /CI gates/, "the copy strips more than the CI gates");
+});
+
 test("uncommitted and untracked files count as part of the change", (t) => {
   t.after(() => {
     git("checkout", "--", "legacy/export_a.js");
