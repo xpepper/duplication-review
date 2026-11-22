@@ -382,6 +382,19 @@ for (const dotConfig of [".config/jscpd.json", ".config/.jscpd.json"]) {
       new RegExp(`Invalid ${dotConfig.replaceAll(".", "\\.")}: expected a JSON object\\.`),
     );
   });
+
+  // Under --config, jscpd rejects the whole file over one ill-typed field,
+  // and its message names the sanitized copy rather than the file to fix.
+  test(`a field jscpd rejects in ${dotConfig} fails with a message naming its source`, (t) => {
+    t.after(() => rmSync(join(repo, ".config"), { recursive: true, force: true }));
+    write(dotConfig, JSON.stringify({ minLines: 50, entry: "src/index.js" }));
+
+    const { status, stderr } = run();
+
+    assert.equal(status, 1);
+    assert.match(stderr, /invalid type/);
+    assert.match(stderr, new RegExp(`from ${dotConfig.replaceAll(".", "\\.")}`));
+  });
 }
 
 test("config precedence matches jscpd: .jscpd.json > .config/jscpd.json > .config/.jscpd.json > package.json", (t) => {

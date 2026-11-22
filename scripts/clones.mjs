@@ -453,8 +453,18 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const discovered = onDisk.length > 0 ? repoConfig(root) : null;
   const configArgs = discovered ? writeSanitizedConfig(discovered.config, outDir) : [];
 
-  const formats = onDisk.length > 0 ? formatsOf(root, outDir, onDisk, configArgs) : [];
-  const detected = formats.length > 0 ? detect(root, outDir, formats, configArgs) : null;
+  let formats, detected;
+  try {
+    formats = onDisk.length > 0 ? formatsOf(root, outDir, onDisk, configArgs) : [];
+    detected = formats.length > 0 ? detect(root, outDir, formats, configArgs) : null;
+  } catch (error) {
+    // jscpd's messages name the sanitized copy, which is not the file to fix.
+    if (!discovered || !(error instanceof Failure)) throw error;
+    throw new Failure(
+      `${error.message.trimEnd()}\njscpd read these settings from ${discovered.source}, ` +
+        `copied without the CI gates to ${configArgs[1]}.`,
+    );
+  }
   return summarize(detected?.report ?? null, changed, {
     base,
     formats,
