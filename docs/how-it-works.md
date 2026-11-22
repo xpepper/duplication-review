@@ -31,6 +31,7 @@ The script keeps project settings such as `ignore` globs and `minLines` or `minT
 | `baseline`, `baselineFromRef` / `baseline-from-ref` | Comparing against a baseline fails when the ref or file is missing and scans a second tree unnecessarily. The script already derives clone origin from the git diff. |
 | `absolute` | Absolute file paths match none of the repo-relative paths from `git diff`, which would turn every touched family into a bystander. |
 | `semantic`, `deadCode` / `dead-code`, `kind` | `semantic` fails without a downloaded embedding model, `deadCode` writes a dead-code report instead of a clone report, and `kind` filters out other clone kinds (or fails the scan if its value is not a list). |
+| `history`, `historySince` / `history-since` | History mode rescans past commits in temporary worktrees, which slows both scans, and it fails when the range or date selects no commits. The script reads none of the history it adds to the report. |
 
 ## 3. Clone origins
 
