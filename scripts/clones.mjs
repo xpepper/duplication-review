@@ -156,10 +156,7 @@ const largestFirst = (sizeKey, itemsKey) => (a, b) => {
 // and the two sides of a clone that overlaps itself become one. The model
 // splits such a family.
 function sameFragment(a, b) {
-  if (a.path !== b.path) return false;
-  const shared = Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
-  const shorter = Math.min(a.end - a.start, b.end - b.start) + 1;
-  return shared * 2 >= shorter;
+  return a.path === b.path && sharedLines(a, b) * 2 >= Math.min(lineCount(a), lineCount(b));
 }
 
 // A renamed clone repeats a clone of the first scan when it joins the same two
@@ -174,11 +171,13 @@ function samePair(a, b) {
 }
 
 function sameSpan(a, b) {
-  if (a.path !== b.path) return false;
-  const shared = Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
-  const longer = Math.max(a.end - a.start, b.end - b.start) + 1;
-  return shared * 2 >= longer;
+  return a.path === b.path && sharedLines(a, b) * 2 >= Math.max(lineCount(a), lineCount(b));
 }
+
+// The lines that two ranges in one file have in common, zero or less when none.
+const sharedLines = (a, b) => Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
+
+const lineCount = (range) => range.end - range.start + 1;
 
 /**
  * Groups clones into candidate families: fragments are nodes, clones are
