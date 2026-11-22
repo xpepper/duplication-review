@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
-import { candidateFamilies, parseChangedRanges, readClones, summarize } from "../scripts/clones.mjs";
+import { candidateFamilies, parseChangedRanges, readClones, repoConfig, summarize } from "../scripts/clones.mjs";
 
 const clone = (first, second, extra = {}) => ({
   format: "javascript",
@@ -464,4 +467,90 @@ test("with no formats to scan the summary is empty and needs no report", () => {
     families: [],
     bystanders: { count: 0, clones: 0, largest: [] },
   });
+});
+
+function tempDir(t) {
+  const dir = mkdtempSync(join(tmpdir(), "clones-config-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const write = (relative, content) => {
+    mkdirSync(dirname(join(dir, relative)), { recursive: true });
+    writeFileSync(join(dir, relative), content);
+  };
+  return { dir, write };
+}
+
+test("repoConfig returns null when no config file exists", (t) => {
+  const { dir } = tempDir(t);
+
+  assert.equal(repoConfig(dir), null);
+});
+
+test("repoConfig follows jscpd's precedence order and names its source", (t) => {
+  const { dir, write } = tempDir(t);
+  write(".jscpd.json", JSON.stringify({ minLines: 11 }));
+  write(".config/jscpd.json", JSON.stringify({ minLines: 12 }));
+  write(".config/.jscpd.json", JSON.stringify({ minLines: 13 }));
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 14 } }));
+
+  assert.deepEqual(repoConfig(dir), {
+    source: ".jscpd.json",
+    config: { minLines: 11 },
+  });
+
+  rmSync(join(dir, ".jscpd.json"));
+  assert.deepEqual(repoConfig(dir), {
+    source: ".config/jscpd.json",
+    config: { minLines: 12 },
+  });
+
+  rmSync(join(dir, ".config/jscpd.json"));
+  assert.deepEqual(repoConfig(dir), {
+    source: ".config/.jscpd.json",
+    config: { minLines: 13 },
+  });
+
+  rmSync(join(dir, ".config/.jscpd.json"));
+  assert.deepEqual(repoConfig(dir), {
+    source: "package.json",
+    config: { minLines: 14 },
+  });
+});
+
+test("repoConfig does not fall through from an empty higher-priority config", (t) => {
+  const { dir, write } = tempDir(t);
+  write(".config/jscpd.json", JSON.stringify({}));
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 50 } }));
+
+  assert.deepEqual(repoConfig(dir), {
+    source: ".config/jscpd.json",
+    config: {},
+  });
+});
+
+for (const source of [".jscpd.json", ".config/jscpd.json", ".config/.jscpd.json"]) {
+  test(`repoConfig names ${source} when it is invalid JSON or not an object`, (t) => {
+    const { dir, write } = tempDir(t);
+    write("package.json", JSON.stringify({ name: "fixture", jscpd: { minLines: 50 } }));
+    write(source, "{not valid json");
+
+    assert.throws(() => repoConfig(dir), new RegExp(`Invalid ${source.replaceAll(".", "\\.")}:`));
+
+    write(source, "[]");
+    assert.throws(
+      () => repoConfig(dir),
+      new RegExp(`Invalid ${source.replaceAll(".", "\\.")}: expected a JSON object\\.`),
+    );
+  });
+}
+
+test("repoConfig ignores package.json when unparseable or without a jscpd object", (t) => {
+  const { dir, write } = tempDir(t);
+  write("package.json", "{not valid json");
+  assert.equal(repoConfig(dir), null);
+
+  write("package.json", JSON.stringify({ name: "fixture" }));
+  assert.equal(repoConfig(dir), null);
+
+  write("package.json", JSON.stringify({ name: "fixture", jscpd: "invalid" }));
+  assert.equal(repoConfig(dir), null);
 });
