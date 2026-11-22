@@ -409,6 +409,43 @@ for (const source of [".jscpd.json", "package.json"]) {
   }
 }
 
+// A repo's history settings make jscpd 5.4.3 rescan past commits in temporary
+// worktrees and add a history field to the report, which the script does not
+// use. A range or date that selects nothing fails the scan; the fixture has
+// only two commits, so HEAD~5..HEAD does not exist.
+const HISTORY_SETTINGS = [
+  { history: "HEAD~5..HEAD" },
+  { historySince: "not-a-date" },
+  { "history-since": "not-a-date" },
+];
+
+for (const source of [".jscpd.json", "package.json"]) {
+  for (const setting of HISTORY_SETTINGS) {
+    test(`${JSON.stringify(setting)} in ${source} does not change the summary`, (t) => {
+      t.after(() => rmSync(join(repo, source), { force: true }));
+      write(source, JSON.stringify(configBody(source, {})));
+      const plain = run();
+      assert.equal(plain.status, 0, plain.stderr);
+      assert.ok(plain.summary.families.length >= 1);
+
+      write(source, JSON.stringify(configBody(source, setting)));
+      const withSetting = run();
+
+      assert.equal(withSetting.status, 0, withSetting.stderr);
+      assert.deepEqual(withSetting.summary, plain.summary);
+      const report = JSON.parse(readFileSync(withSetting.summary.report, "utf8"));
+      assert.equal("history" in report, false);
+      assert.deepEqual(readdirSync(join(repo, ".git", "jscpd-out")).sort(), [
+        "changed-formats.json",
+        "config.json",
+        "jscpd-report.json",
+      ]);
+      assert.equal(git("worktree", "list").split("\n").length, 1);
+      assert.equal(git("status", "--short", "--untracked-files=all"), `?? ${source}`);
+    });
+  }
+}
+
 for (const dotConfig of [".config/jscpd.json", ".config/.jscpd.json"]) {
   test(`${dotConfig} keeps thresholds and ignores while stripping camelCase gates`, (t) => {
     t.after(() => rmSync(join(repo, ".config"), { recursive: true, force: true }));
