@@ -250,23 +250,28 @@ test("kebab-case gates in .jscpd.json do not fail the scan", (t) => {
 
 // jscpd 5.4.3 calls fail-on-empty an unknown field but still applies it, and
 // a change that touches only files jscpd does not analyze scans no files.
-test("kebab-case fail-on-empty in .jscpd.json does not fail a scan of no files", (t) => {
+function assertKebabFailOnEmptyScansNoFiles(t, configPath) {
+  const configEntry = configPath.split("/")[0];
   t.after(() => {
-    rmSync(join(repo, ".jscpd.json"), { force: true });
+    rmSync(join(repo, configEntry), { recursive: true, force: true });
     rmSync(join(repo, "data.xyz"), { force: true });
     rmSync(join(repo, ".git", "info", "exclude"), { force: true });
     git("switch", "--quiet", "change");
   });
   git("switch", "--quiet", "main");
   // Keep the config out of the diff, so that data.xyz is the only change.
-  write(".git/info/exclude", ".jscpd.json\n");
-  write(".jscpd.json", JSON.stringify({ "fail-on-empty": true }));
+  write(".git/info/exclude", `${configEntry}\n`);
+  write(configPath, JSON.stringify({ "fail-on-empty": true }));
   write("data.xyz", "not source code\n");
 
   const { status, stderr, summary } = run();
 
   assert.equal(status, 0, stderr);
   assert.deepEqual(summary.formats, []);
+}
+
+test("kebab-case fail-on-empty in .jscpd.json does not fail a scan of no files", (t) => {
+  assertKebabFailOnEmptyScansNoFiles(t, ".jscpd.json");
 });
 
 test("exit-code gates under package.json's jscpd key do not fail the scan", (t) => {
@@ -352,21 +357,7 @@ for (const dotConfig of [".config/jscpd.json", ".config/.jscpd.json"]) {
   });
 
   test(`kebab-case fail-on-empty in ${dotConfig} does not fail a scan of no files`, (t) => {
-    t.after(() => {
-      rmSync(join(repo, ".config"), { recursive: true, force: true });
-      rmSync(join(repo, "data.xyz"), { force: true });
-      rmSync(join(repo, ".git", "info", "exclude"), { force: true });
-      git("switch", "--quiet", "change");
-    });
-    git("switch", "--quiet", "main");
-    write(".git/info/exclude", ".config/\n");
-    write(dotConfig, JSON.stringify({ "fail-on-empty": true }));
-    write("data.xyz", "not source code\n");
-
-    const { status, stderr, summary } = run();
-
-    assert.equal(status, 0, stderr);
-    assert.deepEqual(summary.formats, []);
+    assertKebabFailOnEmptyScansNoFiles(t, dotConfig);
   });
 
   test(`invalid ${dotConfig} fails with a message naming its source`, (t) => {
