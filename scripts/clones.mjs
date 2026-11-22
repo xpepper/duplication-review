@@ -346,12 +346,16 @@ function readReport(outDir, name) {
 // Settings that make jscpd fail a CI build, or that point it at a baseline of
 // the repo's own, would clash with this scan, which only wants the report. A
 // baseline would also make jscpd scan a second tree for nothing, since the
-// script works out each clone's origin from the diff. jscpd 5.4.3 reads these
-// camelCase names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json
-// and package.json, and the kebab-case aliases listed here. It calls
-// fail-on-empty an unknown field but still applies it. It does not read
-// snake_case spellings, so they need no entry.
+// script works out each clone's origin from the diff. The absolute setting
+// makes jscpd report absolute paths, which match none of the repo-relative
+// changed paths, so every family would look like a bystander. jscpd 5.4.3
+// reads these camelCase names from .jscpd.json, .config/jscpd.json,
+// .config/.jscpd.json and package.json, and the kebab-case aliases listed
+// here. It calls fail-on-empty an unknown field but still applies it. It does
+// not read snake_case spellings, or any spelling of absolute other than
+// "absolute", so they need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
+  "absolute",
   "threshold",
   "exitCode",
   "exit-code",
