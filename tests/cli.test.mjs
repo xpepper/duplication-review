@@ -4,7 +4,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -378,6 +378,33 @@ for (const source of [".jscpd.json", "package.json"]) {
 
       assert.equal(withSetting.status, 0, withSetting.stderr);
       assert.deepEqual(withSetting.summary, plain.summary);
+    });
+  }
+}
+
+// A repo's reportName renames the file jscpd writes. The script names both of
+// its reports on the command line, so the setting changes neither of them.
+for (const source of [".jscpd.json", "package.json"]) {
+  for (const setting of [{ reportName: "custom" }, { "report-name": "custom" }]) {
+    test(`${JSON.stringify(setting)} in ${source} does not change the summary`, (t) => {
+      t.after(() => rmSync(join(repo, source), { force: true }));
+      write(source, JSON.stringify(configBody(source, {})));
+      const plain = run();
+      assert.equal(plain.status, 0, plain.stderr);
+      assert.ok(plain.summary.families.length >= 1);
+
+      write(source, JSON.stringify(configBody(source, setting)));
+      const withSetting = run();
+
+      assert.equal(withSetting.status, 0, withSetting.stderr);
+      assert.deepEqual(withSetting.summary, plain.summary);
+      assert.ok(existsSync(withSetting.summary.report));
+      assert.deepEqual(readdirSync(join(repo, ".git", "jscpd-out")).sort(), [
+        "changed-formats.json",
+        "config.json",
+        "jscpd-report.json",
+      ]);
+      assert.equal(git("status", "--short", "--untracked-files=all"), `?? ${source}`);
     });
   }
 }

@@ -447,7 +447,7 @@ function detect(root, outDir, formats, configArgs) {
     ...configArgs,
     "--format", formats.join(","),
     "--similarity", "--max-gap-lines", "3",
-    "--reporters", "json", "--output", outDir,
+    "--reporters", "json", "--output", outDir, "--report-name", "jscpd-report",
   ]);
   return readReport(outDir, "jscpd-report");
 }
