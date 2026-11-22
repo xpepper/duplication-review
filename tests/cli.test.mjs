@@ -607,24 +607,33 @@ const NORMALIZATION_FIXTURE = {
   "src/c_controller.ts": priceController(),
 };
 
+// Runs the review with an empty config in `source`, then with each setting in
+// turn, asserts that no setting changes the summary, and returns that summary.
+function assertSummaryUnchangedBy(t, source, settings) {
+  t.after(() => rmSync(join(repo, source), { force: true }));
+  write(source, JSON.stringify(configBody(source, {})));
+  const plain = run();
+  assert.equal(plain.status, 0, plain.stderr);
+
+  for (const setting of settings) {
+    write(source, JSON.stringify(configBody(source, setting)));
+    const withSetting = run();
+
+    assert.equal(withSetting.status, 0, withSetting.stderr);
+    assert.deepEqual(withSetting.summary, plain.summary, JSON.stringify(setting));
+  }
+  return plain.summary;
+}
+
 for (const source of [".jscpd.json", "package.json"]) {
   test(`identifier, literal and annotation settings in ${source} keep exact pairs exact`, (t) => {
-    t.after(() => rmSync(join(repo, source), { force: true }));
     writeAll(t, NORMALIZATION_FIXTURE);
-    write(source, JSON.stringify(configBody(source, {})));
-    const plain = run();
-    assert.equal(plain.status, 0, plain.stderr);
-    assert.ok(hasClone(plain.summary.families, "exact", ["src/invoice.js", "src/order.js"]));
-    assert.ok(hasClone(plain.summary.families, "exact", ["tests/cart.test.js", "tests/copy.test.js"]));
-    assert.ok(hasClone(plain.summary.families, "exact", ["src/b_controller.ts", "src/c_controller.ts"]));
 
-    for (const setting of NORMALIZATION_SETTINGS) {
-      write(source, JSON.stringify(configBody(source, setting)));
-      const withSetting = run();
+    const { families } = assertSummaryUnchangedBy(t, source, NORMALIZATION_SETTINGS);
 
-      assert.equal(withSetting.status, 0, withSetting.stderr);
-      assert.deepEqual(withSetting.summary, plain.summary, JSON.stringify(setting));
-    }
+    assert.ok(hasClone(families, "exact", ["src/invoice.js", "src/order.js"]));
+    assert.ok(hasClone(families, "exact", ["tests/cart.test.js", "tests/copy.test.js"]));
+    assert.ok(hasClone(families, "exact", ["src/b_controller.ts", "src/c_controller.ts"]));
   });
 }
 
@@ -632,20 +641,11 @@ for (const source of [".jscpd.json", "package.json"]) {
 // one similar clone, which the renamed scan's --kind renamed then drops.
 for (const source of [".jscpd.json", "package.json"]) {
   test(`a gap setting in ${source} does not hide renamed clones`, (t) => {
-    t.after(() => rmSync(join(repo, source), { force: true }));
     writeAll(t, SERVER_FIXTURE);
-    write(source, JSON.stringify(configBody(source, {})));
-    const plain = run();
-    assert.equal(plain.status, 0, plain.stderr);
-    assert.equal(plain.summary.renamed.clones, 2);
 
-    for (const setting of [{ maxGapLines: 3 }, { "max-gap-lines": 3 }]) {
-      write(source, JSON.stringify(configBody(source, setting)));
-      const withSetting = run();
+    const { renamed } = assertSummaryUnchangedBy(t, source, [{ maxGapLines: 3 }, { "max-gap-lines": 3 }]);
 
-      assert.equal(withSetting.status, 0, withSetting.stderr);
-      assert.deepEqual(withSetting.summary, plain.summary, JSON.stringify(setting));
-    }
+    assert.equal(renamed.clones, 2);
   });
 }
 
