@@ -308,14 +308,12 @@ test("exit-code gates under package.json's jscpd key do not fail the scan", (t) 
 // against a different fix, one that would rewrite jscpd's absolute paths
 // relative to the working directory. That rewrite can go wrong for a path
 // with a space or for a working directory reached through a symlink.
-const asFile = (config) => config;
-const asManifest = (config) => ({ name: "fixture", jscpd: config });
-for (const [source, wrap] of [
-  [".jscpd.json", asFile],
-  [".config/jscpd.json", asFile],
-  [".config/.jscpd.json", asFile],
-  ["package.json", asManifest],
-]) {
+function configBody(source, config) {
+  if (source === "package.json") return { name: "fixture", jscpd: config };
+  return config;
+}
+
+for (const source of [".jscpd.json", ".config/jscpd.json", ".config/.jscpd.json", "package.json"]) {
   test(`absolute: true in ${source} does not change the summary`, (t) => {
     const links = mkdtempSync(join(tmpdir(), "clones-checkout-"));
     t.after(() => {
@@ -327,14 +325,14 @@ for (const [source, wrap] of [
     // An untracked exact copy of a committed file, with a space in its name.
     write("src/invoice copy.js", totalFunction("invoiceTotal"));
     // The config file is itself a change, so both runs need one.
-    write(source, JSON.stringify(wrap({})));
+    write(source, JSON.stringify(configBody(source, {})));
     const plain = run();
     assert.equal(plain.status, 0, plain.stderr);
     assert.ok(
       plain.summary.families[0].fragments.some((f) => f.path === "src/invoice copy.js" && f.touched),
     );
 
-    write(source, JSON.stringify(wrap({ absolute: true })));
+    write(source, JSON.stringify(configBody(source, { absolute: true })));
     const absolute = run();
     symlinkSync(repo, join(links, "checkout"));
     const throughSymlink = run([], { cwd: join(links, "checkout") });
