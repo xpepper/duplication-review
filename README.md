@@ -1,59 +1,93 @@
 # duplication-review
 
-An agent skill that finds the copy/paste clones a change is involved in, then judges each one as a missing abstraction or acceptable repetition.
+An agent skill that finds copy/paste clones touching a change and judges each group as a missing abstraction or acceptable repetition.
 
-A bundled script does the mechanical part, so it comes out the same on every run:
-
-1. Scope the diff and its changed line ranges.
-2. Run [jscpd](https://github.com/kucherenko/jscpd) over the whole tree, including structural matches for renamed copies.
-3. Group the clones into candidate families (clones that share a fragment), keep the families that overlap the diff, and list the largest of the rest as follow-ups.
-
-The agent does the judging: it merges two families when one element would retire both, or splits one when no single element fits all its fragments. Then it rules on each family: extract (name the element that would have made the change easy) or tolerate (say why).
-
-Pairs with [code-refactor-review](https://github.com/xpepper/code-refactor-review), which covers the wider review lenses.
+For every group of clones that overlaps your diff, the agent opens the code and rules **Extract** (naming the missing element and estimating the lines saved) or **Tolerate** (stating why the repetition should stay). The review leaves your files untouched unless you ask the agent to extract.
 
 ## Install
 
-The preferred way is [`npx skills`](https://github.com/vercel-labs/skills), globally for all your projects:
+Install globally across your projects with [`npx skills`](https://github.com/vercel-labs/skills) (preferred):
 
 ```bash
 npx skills add xpepper/duplication-review -g
 ```
 
-Update an existing install with `npx skills update duplication-review -g`.
+Update an existing install with:
 
-Alternatively, use the GitHub CLI:
+```bash
+npx skills update duplication-review -g
+```
+
+Alternatively, install with the GitHub CLI:
 
 ```bash
 gh skill install xpepper/duplication-review
 ```
 
-Requires `git` and Node 22 or later (`node`, `npx`), plus `gh` when reviewing by PR number.
+Both installers pull from `main`.
 
-## Versions
-
-The skill follows [semantic versioning](https://semver.org). Its version is `metadata.version` in the `SKILL.md` frontmatter, so an installed copy says which version it is. Both installers install from `main`.
+Requires `git`, Node 22 or later (`node`, `npx`), and `gh` when reviewing a pull request by number.
 
 ## Usage
 
-The skill never triggers on its own. Run it by typing `/duplication-review` in an interactive Claude Code or Copilot CLI session. Copilot's non-interactive `copilot -p` mode cannot run it, because it does not expand the slash command.
+Run `/duplication-review` in an interactive Claude Code or Copilot CLI session. The skill runs only when you invoke it explicitly (`disable-model-invocation: true`). Non-interactive `copilot -p` cannot run it, because that mode does not expand slash commands.
+
+Point it at uncommitted edits, a local branch, or a pull request number. For a pull request, the agent asks before checking out the PR branch and compares against its base branch.
+
+Each family in the report looks like this:
+
+```markdown
+### calculateOrderTotal: Extract
+Would have made this change easy because: invoice and order totals share the same subtotal, tax, and shipping rules.
+Lives in: src/pricing.js · Lines: 24 now, about 14 after (estimate)
+- src/invoice.js:1-12 <> src/order.js:1-12 (introduced)
+```
+
+When you ask it to extract, the agent puts each extraction in its own refactor-only commit, runs the tests, and re-runs the scan to confirm that the clones are gone.
+
+## How it works
+
+A bundled script handles the mechanical work so every run starts from the same facts, and the agent handles the judgment.
+
+```mermaid
+flowchart TD
+    subgraph script["1. Script (scripts/clones.mjs)"]
+        A["Find changed line ranges from merge base"]
+        B["Scan whole repo with jscpd in changed languages"]
+        C["Group clones into families and label origins"]
+        A --> B --> C
+    end
+
+    C -->|"Touched families"| D
+    C -->|"Untouched families"| G
+
+    subgraph agent["2. Agent (SKILL.md)"]
+        D["Open every fragment and refine family boundaries"]
+        E["Rule Extract or Tolerate for each family"]
+        G["List largest bystanders as follow-ups"]
+        D --> E
+    end
+
+    E --> R["Markdown review report"]
+    G --> R
+```
+
+The script scans the whole repository, not just the diff, so it catches new code copied from existing files. It runs [jscpd](https://github.com/kucherenko/jscpd) only in the languages of the changed files, includes structural matches for renamed copies, honors the repository's own ignore rules and minimum clone sizes, and prints a JSON summary.
+
+The agent opens every fragment in the touched families, merges two families when one element would retire both, or splits one when no single element fits all its fragments. It then rules **Extract** or **Tolerate** on each family and lists the largest untouched families as follow-ups.
+
+Read [How it works](docs/how-it-works.md) for the details on diff scoping, config handling, clone origins, family grouping, and limits.
+
+## Related
+
+Pairs with [code-refactor-review](https://github.com/xpepper/code-refactor-review), which covers the wider review lenses.
 
 ## Development
 
-The script is `scripts/clones.mjs`, with no dependencies. Run its tests with:
+`scripts/clones.mjs` has no runtime dependencies. Run the test suite with:
 
 ```bash
 node --test 'tests/*.test.mjs'
 ```
 
-`tests/cli.test.mjs` runs the script against a throwaway git repository and fetches jscpd through `npx`, so it needs network access the first time.
-
-CI runs the same command on every pull request and on pushes to `main`, on Node 22 (the minimum) and on the current release. See `.github/workflows/test.yml`.
-
-The script pins jscpd to an exact version (`JSCPD_VERSION` in `scripts/clones.mjs`), so the same repo gives the same report over time. To bump it:
-
-1. Read the jscpd changelog between the two versions for changes to what the script relies on: the flags `--similarity`, `--max-gap-lines` and `--report-name`; the config files jscpd auto-discovers and their precedence (`.jscpd.json`, `.config/jscpd.json`, `.config/.jscpd.json`, then `package.json`'s `jscpd` key); the config keys that the script strips (`baseline`, `baselineFromRef`, `absolute`, `semantic`, `deadCode` and `kind` among them), in both the camelCase and the kebab-case spelling, since jscpd reads some keys in both (see `STRIPPED_CONFIG_KEYS`); the report fields `duplicates[].firstFile` and `secondFile` (`name`, `start`, `end`), `kind`, `similarity`, `statistics.total` and `statistics.formats`; the default minimum clone size of 5 lines and 50 tokens, which a test checks; and how jscpd reports a failure (the script treats a non-zero exit or an `Error: ...` line as one).
-2. Change the constant.
-3. Run the tests.
-
-A pull request that changes the skill also bumps `metadata.version` in `SKILL.md`, using its Conventional Commit type: `feat!` or `BREAKING CHANGE` bumps the major version, `feat` the minor version, and `fix` or `perf` the patch version. A change that affects only docs, tests or CI leaves the version alone. A breaking change to the JSON summary counts as major.
+See [Development](docs/development.md) for test prerequisites, CI, bumping the pinned `jscpd` version, and semantic versioning rules.

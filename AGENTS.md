@@ -1,13 +1,13 @@
 # AGENTS.md
 
-How to work in this repo. For what the skill does, how to install it, and how to run the tests or bump jscpd, see [README.md](README.md), in particular its "Development" section.
+How to work in this repo. For an overview and install instructions, see [README.md](README.md). For how the script and skill work in detail, see [docs/how-it-works.md](docs/how-it-works.md); for running tests, bumping jscpd, and versioning, see [docs/development.md](docs/development.md).
 
 ## Working an issue
 
 - Branch from `main`. If the issue depends on another one, wait until that one is merged.
 - The issue's acceptance criteria are the definition of done.
 - Work test-first for any change to `scripts/clones.mjs`. Run `node --test 'tests/*.test.mjs'`.
-- Keep `SKILL.md` and `README.md` in step with any change to the script's output.
+- Keep `SKILL.md`, `README.md`, and `docs/how-it-works.md` in step with any change to the script's output.
 
 ## Self-review before opening a PR
 
