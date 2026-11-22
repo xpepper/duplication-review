@@ -348,14 +348,23 @@ function readReport(outDir, name) {
 // baseline would also make jscpd scan a second tree for nothing, since the
 // script works out each clone's origin from the diff. The absolute setting
 // makes jscpd report absolute paths, which match none of the repo-relative
-// changed paths, so every family would look like a bystander. jscpd 5.4.3
-// reads these camelCase names from .jscpd.json, .config/jscpd.json,
+// changed paths, so every family would look like a bystander. The semantic,
+// deadCode and kind settings change what jscpd scans for. semantic fails the
+// scan on a machine without an embedding model, deadCode makes jscpd write a
+// dead-code report instead of a clone report, and kind drops the clones of
+// other kinds (or fails the scan when it is not a list). jscpd 5.4.3 reads
+// these camelCase names from .jscpd.json, .config/jscpd.json,
 // .config/.jscpd.json and package.json, and the kebab-case aliases listed
 // here. It calls fail-on-empty an unknown field but still applies it. It does
-// not read snake_case spellings, or any spelling of absolute other than
-// "absolute", so they need no entry.
+// not read snake_case spellings, or any other spelling of absolute, semantic
+// or kind (semanticEnabled, semantic-enabled and kinds were tried), so they
+// need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "absolute",
+  "semantic",
+  "deadCode",
+  "dead-code",
+  "kind",
   "threshold",
   "exitCode",
   "exit-code",
