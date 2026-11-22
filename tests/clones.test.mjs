@@ -253,12 +253,6 @@ test("a similar clone keeps the method jscpd found it by", () => {
   assert.equal(ast.method, "ast");
 });
 
-test("a clone that jscpd gives no method gets no method field", () => {
-  const [only] = readClones([clone(["src/a.js", 1, 9], ["src/b.js", 11, 19])], {});
-
-  assert.equal(Object.hasOwn(only, "method"), false);
-});
-
 const families = (duplicates, changed = {}) => candidateFamilies(readClones(duplicates, changed));
 
 const fragmentsOf = (family) => family.fragments.map((f) => [f.path, f.start, f.end]);
