@@ -129,6 +129,7 @@ export function readClones(duplicates, changed) {
       lines: duplicate.lines,
       tokens: duplicate.tokens,
       origin: originOf(located),
+      ...(duplicate.method === undefined ? {} : { method: duplicate.method }),
       ...(duplicate.similarity === undefined ? {} : { similarity: duplicate.similarity }),
       sides: located.map(({ side }) => side),
     };
