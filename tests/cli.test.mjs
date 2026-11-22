@@ -301,6 +301,49 @@ test("exit-code gates under package.json's jscpd key do not fail the scan", (t) 
   assert.ok(summary.families.length >= 1);
 });
 
+// With "absolute": true, jscpd reports absolute paths. Those match none of the
+// changed files, so every family would turn into a bystander. The space in
+// the copy's name and the run through a symlinked checkout come from the
+// acceptance criteria of #46, and both pass without the fix. They guard
+// against a different fix, one that would rewrite jscpd's absolute paths
+// relative to the working directory. That rewrite can go wrong for a path
+// with a space or for a working directory reached through a symlink.
+function configBody(source, config) {
+  if (source === "package.json") return { name: "fixture", jscpd: config };
+  return config;
+}
+
+for (const source of [".jscpd.json", ".config/jscpd.json", ".config/.jscpd.json", "package.json"]) {
+  test(`absolute: true in ${source} does not change the summary`, (t) => {
+    const links = mkdtempSync(join(tmpdir(), "clones-checkout-"));
+    t.after(() => {
+      rmSync(join(repo, source), { force: true });
+      rmSync(join(repo, ".config"), { recursive: true, force: true });
+      rmSync(join(repo, "src", "invoice copy.js"), { force: true });
+      rmSync(links, { recursive: true, force: true });
+    });
+    // An untracked exact copy of a committed file, with a space in its name.
+    write("src/invoice copy.js", totalFunction("invoiceTotal"));
+    // The config file is itself a change, so both runs need one.
+    write(source, JSON.stringify(configBody(source, {})));
+    const plain = run();
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.ok(
+      plain.summary.families[0].fragments.some((f) => f.path === "src/invoice copy.js" && f.touched),
+    );
+
+    write(source, JSON.stringify(configBody(source, { absolute: true })));
+    const absolute = run();
+    symlinkSync(repo, join(links, "checkout"));
+    const throughSymlink = run([], { cwd: join(links, "checkout") });
+
+    assert.equal(absolute.status, 0, absolute.stderr);
+    assert.deepEqual(absolute.summary, plain.summary);
+    assert.equal(throughSymlink.status, 0, throughSymlink.stderr);
+    assert.deepEqual(throughSymlink.summary, plain.summary);
+  });
+}
+
 for (const dotConfig of [".config/jscpd.json", ".config/.jscpd.json"]) {
   test(`${dotConfig} keeps thresholds and ignores while stripping camelCase gates`, (t) => {
     t.after(() => rmSync(join(repo, ".config"), { recursive: true, force: true }));
