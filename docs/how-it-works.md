@@ -12,7 +12,7 @@ Next, the script runs `git diff -U0` from the merge base to the working tree, ca
 
 The script runs a pinned `jscpd` release through `npx` (`JSCPD_VERSION` in [scripts/clones.mjs](../scripts/clones.mjs)) in two passes. First, it runs `jscpd` on only the changed files that exist on disk (with `--min-lines 1 --min-tokens 1`) so `jscpd` names their language formats. If none match a format that `jscpd` knows, the script skips the second pass and emits an empty summary, which tells the skill to stop.
 
-In the second pass, the script scans the whole repository (`.`) for those formats with `--similarity --max-gap-lines 3`. Scanning the whole tree catches code copied from untouched files elsewhere in the repository, and `--similarity` catches structural copies whose local names or literals differ (with up to a three-line gap). Reports land in `<git-dir>/jscpd-out`, leaving the working tree clean. In a linked git worktree, `<git-dir>` sits inside the main repository's `.git` directory, outside the worktree checkout.
+In the second pass, the script scans the whole repository (`.`) for those formats with `--similarity --max-gap-lines 3`. Scanning the whole tree catches code copied from untouched files elsewhere in the repository, and `--similarity` adds clones of kind `similar` in two ways, which `jscpd` names in each clone's `method`: `ast` for structural copies whose local names or literals differ, and `gap` for token copies merged across up to three unmatched lines. Reports land in `<git-dir>/jscpd-out`, leaving the working tree clean. In a linked git worktree, `<git-dir>` sits inside the main repository's `.git` directory, outside the worktree checkout.
 
 ### Repository jscpd configuration
 
@@ -61,5 +61,5 @@ The report prints **Extract** entries first, ordered by `duplicatedLines`, follo
 
 - `jscpd` detects repeated token structure and misses the same intent written in different ways.
 - Unless a repository configures a lower limit, `jscpd` ignores clones shorter than 5 lines or 50 tokens.
-- `jscpd` excludes test files from `--similarity` structural matching, so renamed test code matches only when tokens are exact.
+- `jscpd` excludes test files from the structural (`ast`) matching of `--similarity`, so renamed test code matches only when tokens are exact. Gap merging still covers test files.
 - Finding no clones does not prove that no duplicated logic exists.

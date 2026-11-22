@@ -230,7 +230,7 @@ test("each clone keeps what the judge needs and drops the rest", () => {
   ]);
 });
 
-test("a structural match carries its similarity score", () => {
+test("a similar clone carries its similarity score", () => {
   const changed = { "src/a.js": [{ start: 1, end: 3 }] };
   const [only] = readClones(
     [clone(["src/a.js", 1, 9], ["src/b.js", 11, 19], { kind: "similar", similarity: 0.86 })],
@@ -238,6 +238,25 @@ test("a structural match carries its similarity score", () => {
   );
 
   assert.equal(only.similarity, 0.86);
+});
+
+test("a similar clone keeps the method jscpd found it by", () => {
+  const [gap, ast] = readClones(
+    [
+      clone(["src/a.js", 1, 12], ["src/b.js", 1, 12], { kind: "similar", method: "gap", similarity: 0.974 }),
+      clone(["src/c.js", 1, 9], ["src/d.js", 1, 9], { kind: "similar", method: "ast", similarity: 1 }),
+    ],
+    {},
+  );
+
+  assert.equal(gap.method, "gap");
+  assert.equal(ast.method, "ast");
+});
+
+test("a clone that jscpd gives no method gets no method field", () => {
+  const [only] = readClones([clone(["src/a.js", 1, 9], ["src/b.js", 11, 19])], {});
+
+  assert.equal(Object.hasOwn(only, "method"), false);
 });
 
 const families = (duplicates, changed = {}) => candidateFamilies(readClones(duplicates, changed));

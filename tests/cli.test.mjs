@@ -50,6 +50,37 @@ const pythonFunction = (name) => `def ${name}(records, limit):
     return [entry[0] for entry in kept if entry[1] is not None]
 `;
 
+// totalFunction with every local name changed: jscpd matches it by syntax tree.
+const renamedTotalFunction = `export function quoteSum(lines, vat) {
+  let net = 0;
+  for (const line of lines) {
+    if (line.count <= 0) {
+      throw new Error("invalid quantity for " + line.label);
+    }
+    net += line.cost * line.count;
+  }
+  const levy = net * vat;
+  const postage = net > 100 ? 0 : 9.99;
+  return { net, levy, postage, total: net + levy + postage };
+}
+`;
+
+// With `extra`, one line is inserted mid-block: jscpd merges the token clones around it.
+const setupFunction = (name, extra) => `export function ${name}(config) {
+  const server = createServer(config.port);
+  server.use(logger("combined"));
+  server.use(bodyParser.json());
+  server.use(cors({ origin: config.origin }));
+  server.use(rateLimit({ windowMs: 60000, max: 100 }));
+${extra ? `  ${extra}\n` : ""}  server.use(helmet());
+  server.use(compression());
+  server.use(session({ secret: config.secret }));
+  server.use(passport.initialize());
+  server.use(passport.session());
+  return server;
+}
+`;
+
 let repo;
 let base;
 
@@ -622,6 +653,25 @@ test("uncommitted and untracked files count as part of the change", (t) => {
     summary.families.map((family) => [...new Set(family.clones.map((clone) => clone.origin))]),
     [["introduced"], ["pre-existing-edited"]],
   );
+});
+
+test("a similar clone says whether jscpd merged a gap or matched the syntax tree", (t) => {
+  const added = ["src/quote.js", "src/setup_a.js", "src/setup_b.js"];
+  t.after(() => added.forEach((path) => rmSync(join(repo, path), { force: true })));
+  write("src/quote.js", renamedTotalFunction);
+  write("src/setup_a.js", setupFunction("setupA"));
+  write("src/setup_b.js", setupFunction("setupB", "server.use(metrics(config.metricsPath));"));
+
+  const { status, stderr, summary } = run();
+  const clonesOf = (path) =>
+    summary.families
+      .flatMap((family) => family.clones)
+      .filter((clone) => clone.sides.some((side) => side.path === path))
+      .map((clone) => [clone.kind, clone.method]);
+
+  assert.equal(status, 0, stderr);
+  assert.deepEqual(clonesOf("src/setup_a.js"), [["similar", "gap"]]);
+  assert.deepEqual(clonesOf("src/quote.js"), [["similar", "ast"]]);
 });
 
 test("an explicit base narrows the change to what came after it", () => {
