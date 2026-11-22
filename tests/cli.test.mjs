@@ -122,6 +122,32 @@ test("a basket under the free postage limit pays postage", () => {
 });
 `;
 
+// Top-level code that sets up a server and then its routes, under the given
+// names. `between` separates the two blocks with lines that differ.
+const serverModule = (app, settings, between) => `const ${app} = createApp(${settings}.port);
+${app}.use(logger("combined"));
+${app}.use(bodyParser.json());
+${app}.use(cors({ origin: ${settings}.origin }));
+${app}.use(rateLimit({ windowMs: 60000, max: 100 }));
+${app}.use(helmet());
+${app}.use(compression());
+${app}.use(session({ secret: ${settings}.secret }));
+${app}.use(passport.initialize());
+${app}.use(passport.session());
+${between}
+${app}.get("/health", (req, res) => res.send("ok"));
+${app}.get("/version", (req, res) => res.send(${settings}.version));
+${app}.post("/orders", (req, res) => res.status(201).send(createOrder(req.body)));
+${app}.delete("/orders/:id", (req, res) => res.send(cancelOrder(req.params.id)));
+${app}.listen(${settings}.port);
+export default ${app};
+`;
+
+const SERVER_FIXTURE = {
+  "src/server_a.js": serverModule("app", "settings", "logStartup(settings);\nconst startedAt = Date.now();"),
+  "src/server_b.js": serverModule("api", "options", 'if (options.verbose) printBanner();\ntrackBoot("api", 2);'),
+};
+
 // A TypeScript class, with a decorator on its first method when one is given.
 const priceController = (decorator) => `export class PriceController {
   constructor(private readonly repository: PriceRepository, private readonly clock: Clock) {}
@@ -158,6 +184,17 @@ function write(path, content) {
 }
 
 const clonesIn = (families) => families.reduce((sum, family) => sum + family.clones.length, 0);
+
+// Whether the families hold a clone of this kind between these two files, in either order.
+const hasClone = (families, kind, paths) =>
+  families
+    .flatMap((family) => family.clones)
+    .some((clone) => clone.kind === kind && clone.sides.map((side) => side.path).sort().join() === [...paths].sort().join());
+
+function writeAll(t, files) {
+  t.after(() => Object.keys(files).forEach((path) => rmSync(join(repo, path), { force: true })));
+  Object.entries(files).forEach(([path, content]) => write(path, content));
+}
 
 function run(args = [], { cwd = repo, script = SCRIPT, env = process.env } = {}) {
   const result = spawnSync("node", [script, ...args], { cwd, env, encoding: "utf8" });
@@ -196,7 +233,8 @@ test("a branch with nothing changed reports nothing and scans nothing", (t) => {
     changedFiles: 0,
     formats: [],
     report: null,
-    totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
+    totals: { clones: 0, duplicatedLines: 0, percentage: 0, kinds: ["exact", "similar"] },
+    renamed: { report: null, clones: 0 },
     families: [],
     bystanders: { count: 0, clones: 0, largest: [] },
   });
@@ -225,7 +263,10 @@ test("a committed copy is involved and an old clone elsewhere is a bystander", (
     [["legacy/export_a.js", "legacy/export_b.js"]],
   );
   assert.equal(summary.bystanders.largest[0].clones[0].origin, "pre-existing");
-  assert.equal(clonesIn(summary.families) + summary.bystanders.clones, summary.totals.clones);
+  assert.equal(
+    clonesIn(summary.families) + summary.bystanders.clones,
+    summary.totals.clones + summary.renamed.clones,
+  );
 });
 
 test("only the languages of the changed files are scanned", () => {
@@ -243,6 +284,8 @@ test("the report lands in the git directory and the working tree stays clean", (
 
   assert.equal(summary.report, join(repo, ".git", "jscpd-out", "jscpd-report.json"));
   assert.ok(existsSync(summary.report));
+  assert.equal(summary.renamed.report, join(repo, ".git", "jscpd-out", "renamed-report.json"));
+  assert.ok(existsSync(summary.renamed.report));
   assert.equal(git("status", "--short"), "");
 });
 
@@ -494,6 +537,7 @@ for (const source of [".jscpd.json", "package.json"]) {
         "changed-formats.json",
         "config.json",
         "jscpd-report.json",
+        "renamed-report.json",
       ]);
       assert.equal(git("status", "--short", "--untracked-files=all"), `?? ${source}`);
     });
@@ -530,6 +574,7 @@ for (const source of [".jscpd.json", "package.json"]) {
         "changed-formats.json",
         "config.json",
         "jscpd-report.json",
+        "renamed-report.json",
       ]);
       assert.equal(git("worktree", "list").split("\n").length, 1);
       assert.equal(git("status", "--short", "--untracked-files=all"), `?? ${source}`);
@@ -539,8 +584,10 @@ for (const source of [".jscpd.json", "package.json"]) {
 
 // With identifiers, literals or annotations normalized, jscpd 5.4.3 pairs each
 // copy with one anchor, so a normalized copy that sorts first takes the place
-// of an exact pair. In this fixture basket.test.js renames cart.test.js,
-// bulk.test.js changes its prices, and a_controller.ts adds a decorator.
+// of an exact pair whose whole range it matches. In this fixture
+// src/basket.js renames src/invoice.js, which src/order.js copies exactly,
+// tests/bulk.test.js changes the prices of tests/cart.test.js and its exact
+// copy, and src/a_controller.ts adds a decorator to two exact copies.
 const NORMALIZATION_SETTINGS = [
   { ignoreIdentifiers: true },
   { "ignore-identifiers": true },
@@ -551,7 +598,7 @@ const NORMALIZATION_SETTINGS = [
 ];
 
 const NORMALIZATION_FIXTURE = {
-  "tests/basket.test.js": basketTest,
+  "src/basket.js": renamedTotalFunction,
   "tests/bulk.test.js": cartTest([3.5, 14, 35]),
   "tests/cart.test.js": cartTest(),
   "tests/copy.test.js": cartTest(),
@@ -560,25 +607,39 @@ const NORMALIZATION_FIXTURE = {
   "src/c_controller.ts": priceController(),
 };
 
-const hasClone = (summary, kind, paths) =>
-  summary.families
-    .flatMap((family) => family.clones)
-    .some((clone) => clone.kind === kind && clone.sides.map((side) => side.path).join() === paths.join());
-
 for (const source of [".jscpd.json", "package.json"]) {
   test(`identifier, literal and annotation settings in ${source} keep exact pairs exact`, (t) => {
-    t.after(() => {
-      rmSync(join(repo, source), { force: true });
-      Object.keys(NORMALIZATION_FIXTURE).forEach((path) => rmSync(join(repo, path), { force: true }));
-    });
-    Object.entries(NORMALIZATION_FIXTURE).forEach(([path, content]) => write(path, content));
+    t.after(() => rmSync(join(repo, source), { force: true }));
+    writeAll(t, NORMALIZATION_FIXTURE);
     write(source, JSON.stringify(configBody(source, {})));
     const plain = run();
     assert.equal(plain.status, 0, plain.stderr);
-    assert.ok(hasClone(plain.summary, "exact", ["tests/cart.test.js", "tests/copy.test.js"]));
-    assert.ok(hasClone(plain.summary, "exact", ["src/b_controller.ts", "src/c_controller.ts"]));
+    assert.ok(hasClone(plain.summary.families, "exact", ["src/invoice.js", "src/order.js"]));
+    assert.ok(hasClone(plain.summary.families, "exact", ["tests/cart.test.js", "tests/copy.test.js"]));
+    assert.ok(hasClone(plain.summary.families, "exact", ["src/b_controller.ts", "src/c_controller.ts"]));
 
     for (const setting of NORMALIZATION_SETTINGS) {
+      write(source, JSON.stringify(configBody(source, setting)));
+      const withSetting = run();
+
+      assert.equal(withSetting.status, 0, withSetting.stderr);
+      assert.deepEqual(withSetting.summary, plain.summary, JSON.stringify(setting));
+    }
+  });
+}
+
+// A gap setting would merge the two renamed blocks of the server fixture into
+// one similar clone, which the renamed scan's --kind renamed then drops.
+for (const source of [".jscpd.json", "package.json"]) {
+  test(`a gap setting in ${source} does not hide renamed clones`, (t) => {
+    t.after(() => rmSync(join(repo, source), { force: true }));
+    writeAll(t, SERVER_FIXTURE);
+    write(source, JSON.stringify(configBody(source, {})));
+    const plain = run();
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.equal(plain.summary.renamed.clones, 2);
+
+    for (const setting of [{ maxGapLines: 3 }, { "max-gap-lines": 3 }]) {
       write(source, JSON.stringify(configBody(source, setting)));
       const withSetting = run();
 
@@ -769,7 +830,7 @@ test("uncommitted and untracked files count as part of the change", (t) => {
   assert.ok(touched.includes("src/cart.js"), "untracked file");
   assert.ok(touched.includes("legacy/export_a.js"), "uncommitted edit");
   assert.deepEqual(summary.bystanders, { count: 0, clones: 0, largest: [] });
-  assert.equal(clonesIn(summary.families), summary.totals.clones);
+  assert.equal(clonesIn(summary.families), summary.totals.clones + summary.renamed.clones);
   assert.deepEqual(
     summary.families.map((family) => family.fragments.map((f) => f.path)),
     [["src/cart.js", "src/invoice.js", "src/order.js"], ["legacy/export_a.js", "legacy/export_b.js"]],
@@ -799,6 +860,43 @@ test("a similar clone says whether jscpd merged a gap or matched the syntax tree
   assert.equal(status, 0, stderr);
   assert.deepEqual(clonesOf("src/setup_a.js"), [["similar", "gap"]]);
   assert.deepEqual(clonesOf("src/quote.js"), [["similar", "ast"]]);
+});
+
+// src/basket.js renames src/invoice.js and sorts before it and its exact copy
+// src/order.js, so a single scan with names normalized would pair basket.js
+// with each and lose the exact pair. The renamed scan only adds to the first.
+test("a renamed copy of test setup is a renamed clone, and an exact copy keeps its kind and pair", (t) => {
+  writeAll(t, {
+    "src/basket.js": renamedTotalFunction,
+    "tests/basket.test.js": basketTest,
+    "tests/cart.test.js": cartTest(),
+  });
+
+  const { status, stderr, summary } = run();
+
+  assert.equal(status, 0, stderr);
+  assert.ok(hasClone(summary.families, "renamed", ["tests/basket.test.js", "tests/cart.test.js"]), "renamed setup");
+  assert.ok(hasClone(summary.families, "exact", ["src/invoice.js", "src/order.js"]), "exact pair");
+  assert.equal(
+    clonesIn(summary.families) + summary.bystanders.clones,
+    summary.totals.clones + summary.renamed.clones,
+  );
+});
+
+test("a renamed copy of top-level code is found block by block", (t) => {
+  writeAll(t, SERVER_FIXTURE);
+
+  const { status, stderr, summary } = run();
+  const servers = summary.families.filter((f) => f.fragments.some((x) => x.path === "src/server_a.js"));
+
+  assert.equal(status, 0, stderr);
+  assert.deepEqual(
+    servers.map((f) => f.clones.map((clone) => [clone.kind, ...clone.sides.map((side) => side.path)])),
+    [
+      [["renamed", "src/server_a.js", "src/server_b.js"]],
+      [["renamed", "src/server_a.js", "src/server_b.js"]],
+    ],
+  );
 });
 
 test("an explicit base narrows the change to what came after it", () => {
