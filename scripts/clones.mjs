@@ -417,10 +417,10 @@ function writeSanitizedConfig(config, outDir) {
 }
 
 // jscpd takes format names, not extensions, so it names the changed files' formats itself.
-function formatsOf(root, outDir, onDisk, config) {
+function formatsOf(root, outDir, onDisk, configArgs) {
   jscpd(root, [
     ...onDisk,
-    ...config,
+    ...configArgs,
     "--min-lines", "1", "--min-tokens", "1",
     "--reporters", "json", "--output", outDir, "--report-name", "changed-formats",
   ]);
@@ -428,10 +428,10 @@ function formatsOf(root, outDir, onDisk, config) {
   return Object.keys(report.statistics.formats).sort();
 }
 
-function detect(root, outDir, formats, config) {
+function detect(root, outDir, formats, configArgs) {
   jscpd(root, [
     ".",
-    ...config,
+    ...configArgs,
     "--format", formats.join(","),
     "--similarity", "--max-gap-lines", "3",
     "--reporters", "json", "--output", outDir,
@@ -451,10 +451,10 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const paths = Object.keys(changed);
   const onDisk = paths.filter((path) => existsSync(join(root, path)));
   const discovered = onDisk.length > 0 ? repoConfig(root) : null;
-  const config = discovered ? writeSanitizedConfig(discovered.config, outDir) : [];
+  const configArgs = discovered ? writeSanitizedConfig(discovered.config, outDir) : [];
 
-  const formats = onDisk.length > 0 ? formatsOf(root, outDir, onDisk, config) : [];
-  const detected = formats.length > 0 ? detect(root, outDir, formats, config) : null;
+  const formats = onDisk.length > 0 ? formatsOf(root, outDir, onDisk, configArgs) : [];
+  const detected = formats.length > 0 ? detect(root, outDir, formats, configArgs) : null;
   return summarize(detected?.report ?? null, changed, {
     base,
     formats,
