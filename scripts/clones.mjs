@@ -484,7 +484,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
     if (!discovered || !(error instanceof Failure)) throw error;
     throw new Failure(
       `${error.message.trimEnd()}\njscpd read these settings from ${discovered.source}, ` +
-        `copied without the CI gates to ${configArgs[1]}.`,
+        `copied to ${configArgs[1]} without the settings that would break or distort this review.`,
     );
   }
   return summarize(detected?.report ?? null, changed, {
