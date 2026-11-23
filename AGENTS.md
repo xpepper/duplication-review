@@ -8,6 +8,7 @@ How to work in this repo. For an overview and install instructions, see [README.
 - The issue's acceptance criteria are the definition of done.
 - Work test-first for any change to `scripts/clones.mjs`. Run `node --test 'tests/*.test.mjs'`.
 - Keep `SKILL.md`, `README.md`, and `docs/how-it-works.md` in step with any change to the script's output.
+- Name scans, clones, families and rulings as [GLOSSARY.md](GLOSSARY.md) does, in code comments, docs and PR text.
 
 ## Self-review before opening a PR
 
