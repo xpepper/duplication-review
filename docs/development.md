@@ -1,6 +1,6 @@
 # Development
 
-This page covers running tests, updating the pinned `jscpd` version, and versioning releases of `duplication-review`. For repository conventions and `jscpd` quirks verified against the pinned version, see [AGENTS.md](../AGENTS.md).
+This page covers running tests, running ruling stability evals, updating the pinned `jscpd` version, and versioning releases of `duplication-review`. For repository conventions and `jscpd` quirks verified against the pinned version, see [AGENTS.md](../AGENTS.md).
 
 ## Running tests
 
@@ -10,12 +10,32 @@ This page covers running tests, updating the pinned `jscpd` version, and version
 node --test 'tests/*.test.mjs'
 ```
 
-The suite has two files:
+The suite has three files:
 
 - [tests/clones.test.mjs](../tests/clones.test.mjs) tests the pure functions directly (diff parsing, clone classification, family grouping, and summary assembly).
 - [tests/cli.test.mjs](../tests/cli.test.mjs) runs `scripts/clones.mjs` end to end against a throwaway git repository and fetches `jscpd` through `npx`. It needs network access the first time to populate the `npx` cache.
+- [tests/evals.test.mjs](../tests/evals.test.mjs) tests the eval runner's parser, table formatting, failure handling, and fixture repos without calling `claude`.
 
 CI runs the same command on every pull request and on pushes to `main`, on Node 22 (the minimum supported version) and on the current Node release. See [.github/workflows/test.yml](../.github/workflows/test.yml).
+
+## Running evals
+
+The evals measure how often the `Extract` or `Tolerate` ruling flips across repeated headless runs of the skill. Because each run invokes `claude -p` and costs tokens, the evals stay out of CI.
+
+Run the stability evals from the repository root:
+
+```bash
+node evals/run.mjs
+```
+
+By default, this runs each fixture in [evals/fixtures.mjs](../evals/fixtures.mjs) 5 times against `sonnet`, prints the resolved model ID and a table of `Extract`, `Tolerate`, and `other` counts, and exits with status 1 if any run fails to produce a single parsable `### <name>: Extract | Tolerate` ruling heading. Each run gets a fresh throwaway git repository with this repo symlinked under `.claude/skills/` and `.claude` excluded from git, isolated from user-level skills and MCP servers (`--setting-sources project --strict-mcp-config --no-session-persistence`).
+
+Options:
+
+- `--runs <N>`: runs per fixture (default `5`).
+- `--model <model>`: model alias or full ID passed to `claude --model` (default `sonnet`).
+- `--fixture <name>`: run only the named fixture (repeatable or comma-separated).
+- `--check-fixtures`: verify that every fixture produces one touched family in `scripts/clones.mjs` without calling `claude`.
 
 ## Bumping jscpd
 
