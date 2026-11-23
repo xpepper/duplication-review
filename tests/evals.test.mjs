@@ -6,6 +6,7 @@ import {
   existsSync,
   lstatSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -272,6 +273,40 @@ test("createFixtureRepo links only SKILL.md and scripts/ and hides the fixture n
     encoding: "utf8",
   }).trim();
   assert.equal(status, "");
+});
+
+test("createFixtureRepo creates .git/info when git template omits it and cleans up on error", (t) => {
+  const emptyTemplate = mkdtempSync(join(tmpdir(), "eval-empty-template-"));
+  const isolatedTmp = mkdtempSync(join(tmpdir(), "eval-isolated-tmp-"));
+  t.after(() => {
+    rmSync(emptyTemplate, { recursive: true, force: true });
+    rmSync(isolatedTmp, { recursive: true, force: true });
+  });
+
+  const prevTemplate = process.env.GIT_TEMPLATE_DIR;
+  process.env.GIT_TEMPLATE_DIR = emptyTemplate;
+  let dir;
+  try {
+    dir = createFixtureRepo(FIXTURES[0], { skillDir: REPO_ROOT });
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const exclude = readFileSync(join(dir, ".git", "info", "exclude"), "utf8");
+    assert.match(exclude, /^\.claude$/m);
+  } finally {
+    if (prevTemplate === undefined) delete process.env.GIT_TEMPLATE_DIR;
+    else process.env.GIT_TEMPLATE_DIR = prevTemplate;
+  }
+
+  const prevTmp = process.env.TMPDIR;
+  process.env.TMPDIR = isolatedTmp;
+  try {
+    assert.throws(() =>
+      createFixtureRepo({ name: "broken", baseFiles: { ".": "invalid" }, changeFiles: {} }),
+    );
+    assert.deepEqual(readdirSync(isolatedTmp), []);
+  } finally {
+    if (prevTmp === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = prevTmp;
+  }
 });
 
 test("runEvals counts unparsable runs under other, reports failures, and removes temp repos", () => {

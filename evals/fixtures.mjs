@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -288,21 +289,27 @@ export function createFixtureRepo(
   { skillDir = null, skillName = "duplication-review-eval" } = {},
 ) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "eval-")));
-  git(dir, "init", "--quiet", "--initial-branch", "main");
-  writeFiles(dir, fixture.baseFiles);
-  git(dir, "add", "--all");
-  git(dir, "commit", "--quiet", "--message", "base");
-  git(dir, "switch", "--quiet", "--create", "change");
-  writeFiles(dir, fixture.changeFiles);
-  git(dir, "add", "--all");
-  git(dir, "commit", "--quiet", "--message", "change");
+  try {
+    git(dir, "init", "--quiet", "--initial-branch", "main");
+    writeFiles(dir, fixture.baseFiles);
+    git(dir, "add", "--all");
+    git(dir, "commit", "--quiet", "--message", "base");
+    git(dir, "switch", "--quiet", "--create", "change");
+    writeFiles(dir, fixture.changeFiles);
+    git(dir, "add", "--all");
+    git(dir, "commit", "--quiet", "--message", "change");
 
-  if (skillDir) {
-    const skillTarget = join(dir, ".claude", "skills", skillName);
-    mkdirSync(skillTarget, { recursive: true });
-    symlinkSync(join(skillDir, "SKILL.md"), join(skillTarget, "SKILL.md"));
-    symlinkSync(join(skillDir, "scripts"), join(skillTarget, "scripts"));
-    appendFileSync(join(dir, ".git", "info", "exclude"), "\n.claude\n");
+    if (skillDir) {
+      const skillTarget = join(dir, ".claude", "skills", skillName);
+      mkdirSync(skillTarget, { recursive: true });
+      symlinkSync(join(skillDir, "SKILL.md"), join(skillTarget, "SKILL.md"));
+      symlinkSync(join(skillDir, "scripts"), join(skillTarget, "scripts"));
+      mkdirSync(join(dir, ".git", "info"), { recursive: true });
+      appendFileSync(join(dir, ".git", "info", "exclude"), "\n.claude\n");
+    }
+    return dir;
+  } catch (error) {
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
   }
-  return dir;
 }
