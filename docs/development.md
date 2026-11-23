@@ -28,7 +28,7 @@ Run the stability evals from the repository root:
 node evals/run.mjs
 ```
 
-By default, this runs each fixture in [evals/fixtures.mjs](../evals/fixtures.mjs) 5 times against `sonnet`, prints the resolved model ID and a table of `Extract`, `Tolerate`, and `other` counts, and exits with status 1 if any run fails to produce a single parsable `### <name>: Extract | Tolerate` ruling heading. Each run gets a fresh throwaway git repository with this repo symlinked under `.claude/skills/` and `.claude` excluded from git, isolated from user-level skills and MCP servers (`--setting-sources project --strict-mcp-config --no-session-persistence`).
+By default, this runs each fixture in [evals/fixtures.mjs](../evals/fixtures.mjs) 5 times against `sonnet`, prints the resolved model ID and a table of `Extract`, `Tolerate`, and `other` counts, and exits with status 1 if any run fails to produce a single parsable `### <name>: Extract | Tolerate` ruling heading. Each run gets a fresh throwaway git repository with only `SKILL.md` and `scripts/` symlinked under `.claude/skills/` and `.claude` excluded from git, isolated from user-level skills and MCP servers (`--setting-sources project --strict-mcp-config --no-session-persistence`).
 
 Options:
 

@@ -241,13 +241,28 @@ test("parseArgs rejects invalid --runs, unknown fixtures, and unknown flags", ()
   assert.throws(() => parseArgs(["--bogus"], names), /Unknown or incomplete option/);
 });
 
-test("createFixtureRepo links the skill and excludes .claude from git status", (t) => {
-  const dir = createFixtureRepo(FIXTURES[0], { skillDir: REPO_ROOT });
+test("createFixtureRepo links only SKILL.md and scripts/ and hides the fixture name", (t) => {
+  const fixture = FIXTURES[0];
+  const dir = createFixtureRepo(fixture, { skillDir: REPO_ROOT });
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
-  const link = join(dir, ".claude", "skills", "duplication-review-eval");
-  assert.equal(lstatSync(link).isSymbolicLink(), true);
-  assert.equal(existsSync(join(link, "SKILL.md")), true);
+  assert.equal(dir.includes(fixture.name), false);
+
+  const subjects = execFileSync("git", ["log", "--format=%s"], {
+    cwd: dir,
+    encoding: "utf8",
+  })
+    .trim()
+    .split("\n");
+  assert.deepEqual(subjects, ["change", "base"]);
+
+  const skillTarget = join(dir, ".claude", "skills", "duplication-review-eval");
+  assert.equal(lstatSync(skillTarget).isDirectory(), true);
+  assert.equal(lstatSync(join(skillTarget, "SKILL.md")).isSymbolicLink(), true);
+  assert.equal(lstatSync(join(skillTarget, "scripts")).isSymbolicLink(), true);
+  assert.equal(existsSync(join(skillTarget, "SKILL.md")), true);
+  assert.equal(existsSync(join(skillTarget, "scripts", "clones.mjs")), true);
+  assert.equal(existsSync(join(skillTarget, "evals")), false);
 
   const exclude = readFileSync(join(dir, ".git", "info", "exclude"), "utf8");
   assert.match(exclude, /^\.claude$/m);

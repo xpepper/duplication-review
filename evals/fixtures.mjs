@@ -273,15 +273,17 @@ function writeFiles(root, files) {
 
 /**
  * Builds a throwaway git repository for one fixture, with baseFiles on main
- * and changeFiles committed on a change branch. When skillDir is given, links
- * the skill into .claude/skills/<skillName> and excludes .claude in
- * .git/info/exclude so it never counts as an untracked change.
+ * and changeFiles committed on a change branch. Uses neutral directory and
+ * commit names so the fixture name never reaches the model. When skillDir is
+ * given, links only SKILL.md and scripts/ into .claude/skills/<skillName> and
+ * excludes .claude in .git/info/exclude so it never counts as an untracked
+ * change.
  */
 export function createFixtureRepo(
   fixture,
   { skillDir = null, skillName = "duplication-review-eval" } = {},
 ) {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), `eval-${fixture.name}-`)));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "eval-")));
   git(dir, "init", "--quiet", "--initial-branch", "main");
   writeFiles(dir, fixture.baseFiles);
   git(dir, "add", "--all");
@@ -289,12 +291,13 @@ export function createFixtureRepo(
   git(dir, "switch", "--quiet", "--create", "change");
   writeFiles(dir, fixture.changeFiles);
   git(dir, "add", "--all");
-  git(dir, "commit", "--quiet", "--message", `change: ${fixture.name}`);
+  git(dir, "commit", "--quiet", "--message", "change");
 
   if (skillDir) {
-    const skillsDir = join(dir, ".claude", "skills");
-    mkdirSync(skillsDir, { recursive: true });
-    symlinkSync(skillDir, join(skillsDir, skillName));
+    const skillTarget = join(dir, ".claude", "skills", skillName);
+    mkdirSync(skillTarget, { recursive: true });
+    symlinkSync(join(skillDir, "SKILL.md"), join(skillTarget, "SKILL.md"));
+    symlinkSync(join(skillDir, "scripts"), join(skillTarget, "scripts"));
     appendFileSync(join(dir, ".git", "info", "exclude"), "\n.claude\n");
   }
   return dir;
