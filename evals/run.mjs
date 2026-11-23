@@ -51,6 +51,17 @@ function resolvedModel(payload) {
   return typeof payload?.model === "string" ? payload.model : null;
 }
 
+function firstLine(text, max = 120) {
+  const line = String(text ?? "").trim().split(/\r?\n/)[0]?.trim() ?? "";
+  return line.length > max ? `${line.slice(0, max - 3)}...` : line;
+}
+
+function formatDenial(denial) {
+  const tool = denial?.tool_name ?? "unknown";
+  const command = denial?.tool_input?.command;
+  return command ? `${tool}(${command})` : tool;
+}
+
 /**
  * Classifies one headless claude invocation into Extract, Tolerate, or other
  * with a diagnostic reason when no single ruling could be parsed.
@@ -60,7 +71,7 @@ export function classifyRun(outcome) {
     return { ruling: "other", model: null, reason: `claude terminated by ${outcome.signal}` };
   }
   if (outcome.status !== 0) {
-    const detail = `${outcome.stderr ?? ""}${outcome.stdout ?? ""}`.trim().split("\n")[0];
+    const detail = firstLine(`${outcome.stderr ?? ""}${outcome.stdout ?? ""}`);
     return {
       ruling: "other",
       model: null,
@@ -77,7 +88,7 @@ export function classifyRun(outcome) {
 
   const model = resolvedModel(payload);
   if (payload?.is_error) {
-    const message = typeof payload.result === "string" ? payload.result.split("\n")[0] : "";
+    const message = firstLine(payload.result);
     return {
       ruling: "other",
       model,
@@ -87,7 +98,20 @@ export function classifyRun(outcome) {
 
   const rulings = parseRulings(payload?.result ?? "");
   if (rulings.length === 0) {
-    return { ruling: "other", model, reason: "no parsable ruling heading" };
+    const denials = Array.isArray(payload?.permission_denials) ? payload.permission_denials : [];
+    if (denials.length > 0) {
+      return {
+        ruling: "other",
+        model,
+        reason: `permission denied: ${denials.map(formatDenial).join(", ")}`,
+      };
+    }
+    const snippet = firstLine(payload?.result);
+    return {
+      ruling: "other",
+      model,
+      reason: `no parsable ruling heading${snippet ? ` (got: ${snippet})` : ""}`,
+    };
   }
   if (rulings.length > 1) {
     return {
@@ -208,7 +232,25 @@ export function parseArgs(argv, fixtureNames) {
   return options;
 }
 
-function invokeClaude(cwd, { model, skillName }) {
+function allowedToolsFor(cwd, skillDir, skillName) {
+  // SKILL.md's frontmatter allows the script via ${CLAUDE_SKILL_DIR} (an
+  // absolute path), so a relative path like `.claude/skills/...` is denied in
+  // non-interactive `-p` mode. Allow all three spellings of scripts/clones.mjs
+  // alongside git and Read so path spelling does not abort a ruling eval.
+  const relScript = `.claude/skills/${skillName}/scripts/clones.mjs`;
+  const scripts = new Set([
+    relScript,
+    join(cwd, relScript),
+    join(skillDir, "scripts", "clones.mjs"),
+  ]);
+  return [
+    ...[...scripts].flatMap((script) => [`Bash(node ${script})`, `Bash(node ${script} *)`]),
+    "Bash(git *)",
+    "Read",
+  ];
+}
+
+function invokeClaude(cwd, { model, skillDir, skillName }) {
   // Isolate from user-level skills and MCP servers so the run tests this repo's
   // SKILL.md cleanly and leaves no throwaway session behind.
   const run = spawnSync(
@@ -220,6 +262,8 @@ function invokeClaude(cwd, { model, skillName }) {
       "--no-session-persistence",
       "--setting-sources", "project",
       "--strict-mcp-config",
+      "--allowedTools",
+      ...allowedToolsFor(cwd, skillDir, skillName),
     ],
     { cwd, encoding: "utf8" },
   );
@@ -251,7 +295,7 @@ export function runEvals({
       const started = Date.now();
       let classified;
       try {
-        classified = classifyRun(invoke(dir, { model, skillName }));
+        classified = classifyRun(invoke(dir, { model, skillDir, skillName }));
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

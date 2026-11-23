@@ -114,8 +114,25 @@ test("classifyRun counts unparsable, multi-ruling, and failed runs as other", ()
     }),
   );
   assert.equal(noHeading.ruling, "other");
-  assert.match(noHeading.reason, /no parsable ruling/i);
+  assert.match(noHeading.reason, /no parsable ruling.*Looks duplicated/i);
   assert.equal(noHeading.model, "claude-sonnet-4-6");
+
+  const denied = classifyRun(
+    jsonOutcome({
+      is_error: false,
+      result: "The command needs your approval to run.",
+      permission_denials: [
+        {
+          tool_name: "Bash",
+          tool_input: { command: "node .claude/skills/duplication-review-eval/scripts/clones.mjs" },
+        },
+      ],
+      modelUsage: { "claude-sonnet-4-6": {} },
+    }),
+  );
+  assert.equal(denied.ruling, "other");
+  assert.match(denied.reason, /permission denied: Bash\(node \.claude\/skills\//);
+  assert.equal(denied.model, "claude-sonnet-4-6");
 
   const multi = classifyRun(
     jsonOutcome({
@@ -288,10 +305,12 @@ test("CLI prints the table, counts unparsable output under other, and exits 1", 
   t.after(() => rmSync(binDir, { recursive: true, force: true }));
 
   const fakeClaude = join(binDir, "claude");
+  const argsLog = join(binDir, "args.txt");
   writeFileSync(
     fakeClaude,
     [
       "#!/bin/sh",
+      `printf '%s\\n' "$@" > "${argsLog}"`,
       'printf \'{"is_error":false,"result":"No heading here.","modelUsage":{"fake-sonnet":{}}}\\n\'',
     ].join("\n"),
   );
@@ -312,7 +331,17 @@ test("CLI prints the table, counts unparsable output under other, and exits 1", 
   assert.match(res.stdout, /Model: fake-sonnet \(requested: sonnet\) · Runs: 1/);
   assert.match(res.stdout, /copied-rule\s+Extract\s+0\s+0\s+1/);
   assert.match(res.stderr, /Failed: 1 run\(s\) produced no parsable ruling/);
-  assert.match(res.stderr, /copied-rule run 1: no parsable ruling heading/);
+  assert.match(res.stderr, /copied-rule run 1: no parsable ruling heading \(got: No heading here\.\)/);
+
+  const argv = readFileSync(argsLog, "utf8").split("\n");
+  assert.ok(argv.includes("--setting-sources"));
+  assert.ok(argv.includes("--strict-mcp-config"));
+  assert.ok(argv.includes("--no-session-persistence"));
+  assert.ok(argv.includes("--allowedTools"));
+  assert.ok(
+    argv.includes("Bash(node .claude/skills/duplication-review-eval/scripts/clones.mjs)"),
+  );
+  assert.ok(argv.includes("Read"));
 });
 
 test("every fixture produces one touched family and zero bystanders in clones.mjs", (t) => {
