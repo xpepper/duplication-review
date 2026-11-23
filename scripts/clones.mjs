@@ -390,8 +390,8 @@ function readReport(outDir, name) {
 // and ignoreAnnotations settings make jscpd match code after normalizing names,
 // literals or decorators, and an exact pair can then give way to normalized
 // ones, as the comment above RENAMED_SCAN explains. The summary would lose its
-// strongest evidence. Each scan sets its own gap with --max-gap-lines, and
-// every jscpd call names its report with --report-name. Each flag overrides
+// strongest evidence. Both clone scans set their own gap with --max-gap-lines,
+// and every jscpd call names its report with --report-name. Each flag overrides
 // the maxGapLines or reportName setting, but a file that spells one of them
 // both ways fails the scan with a duplicate field. jscpd 5.4.3 reads these
 // camelCase names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json
