@@ -190,6 +190,7 @@ export const FIXTURES = [
   {
     name: "copied-rule",
     expected: "Extract",
+    expectedClones: ["exact"],
     baseFiles: {
       "src/invoice.js": TOTAL_FUNCTION("invoiceTotal"),
     },
@@ -208,6 +209,7 @@ export const FIXTURES = [
   {
     name: "gap-shared-rule",
     expected: "Extract",
+    expectedClones: ["similar/gap", "renamed"],
     baseFiles: {
       "src/api/orders.js": API_FETCH_FUNCTION("fetchOrders", "/v2/orders", null),
     },
@@ -229,6 +231,7 @@ export const FIXTURES = [
   {
     name: "look-alike-test",
     expected: "Tolerate",
+    expectedClones: ["exact"],
     baseFiles: {
       "src/cart.js": CART_MODULE,
       "tests/shipping.test.js": SHIPPING_TEST,
@@ -247,6 +250,7 @@ export const FIXTURES = [
   {
     name: "accidental-look-alike",
     expected: "Tolerate",
+    expectedClones: ["similar/ast"],
     baseFiles: {
       "src/inventory/overflow.js": OVERFLOW_MODULE,
     },

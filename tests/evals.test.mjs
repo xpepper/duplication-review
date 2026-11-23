@@ -15,8 +15,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FIXTURES, createFixtureRepo } from "../evals/fixtures.mjs";
-import { review } from "../scripts/clones.mjs";
 import {
+  checkFixture,
   classifyRun,
   formatTable,
   parseArgs,
@@ -360,25 +360,44 @@ test("CLI prints the table, counts unparsable output under other, and exits 1", 
   assert.ok(argv.includes("Read"));
 });
 
-test("every fixture produces one touched family and zero bystanders in clones.mjs", (t) => {
+test("checkFixture reports family count, bystander, and clone-kind mismatches", () => {
+  const fixture = {
+    ...FIXTURES[0],
+    expectedClones: ["similar/gap", "renamed"],
+  };
+
+  const matching = checkFixture(fixture, {
+    skillDir: REPO_ROOT,
+    scan: () => ({
+      families: [{ clones: [{ kind: "renamed" }, { kind: "similar", method: "gap" }] }],
+      bystanders: { count: 0 },
+    }),
+  });
+  assert.deepEqual(matching.problems, []);
+
+  const mismatched = checkFixture(fixture, {
+    skillDir: REPO_ROOT,
+    scan: () => ({
+      families: [{ clones: [{ kind: "exact" }] }, { clones: [] }],
+      bystanders: { count: 2 },
+    }),
+  });
+  assert.equal(mismatched.problems.length, 3);
+  assert.match(mismatched.problems[0], /expected 1 touched family, got 2/);
+  assert.match(mismatched.problems[1], /expected 0 bystanders, got 2/);
+  assert.match(
+    mismatched.problems[2],
+    /expected clones \[similar\/gap, renamed\], got \[exact\]/,
+  );
+});
+
+test("every fixture produces one touched family, zero bystanders, and its expected clone kinds", () => {
   for (const fixture of FIXTURES) {
     assert.ok(
       fixture.expected === "Extract" || fixture.expected === "Tolerate",
       `${fixture.name} expected ruling must be Extract or Tolerate`,
     );
-    const dir = createFixtureRepo(fixture, { skillDir: REPO_ROOT });
-    t.after(() => rmSync(dir, { recursive: true, force: true }));
-
-    const summary = review({ cwd: dir });
-    assert.equal(
-      summary.families.length,
-      1,
-      `${fixture.name} should have 1 touched family, got ${summary.families.length}`,
-    );
-    assert.equal(
-      summary.bystanders.count,
-      0,
-      `${fixture.name} should have 0 bystanders, got ${summary.bystanders.count}`,
-    );
+    const { problems } = checkFixture(fixture, { skillDir: REPO_ROOT });
+    assert.deepEqual(problems, [], `${fixture.name}: ${problems.join("; ")}`);
   }
 });

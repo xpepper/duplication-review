@@ -299,26 +299,59 @@ export function runEvals({
   return { rows, failures, models: [...models] };
 }
 
+/**
+ * Runs scripts/clones.mjs on one fixture repo and returns its counts, clone
+ * kinds, and any mismatch against the fixture's expected single family, zero
+ * bystanders, and clone kinds.
+ */
+export function checkFixture(
+  fixture,
+  { skillDir = SKILL_DIR, skillName = SKILL_NAME, scan = review } = {},
+) {
+  const dir = createFixtureRepo(fixture, { skillDir, skillName });
+  let summary;
+  try {
+    summary = scan({ cwd: dir });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const families = summary.families.length;
+  const bystanders = summary.bystanders.count;
+  const clones = summary.families
+    .flatMap((f) => f.clones)
+    .map((c) => (c.method ? `${c.kind}/${c.method}` : c.kind));
+  const problems = [];
+  if (families !== 1) {
+    problems.push(`expected 1 touched family, got ${families}`);
+  }
+  if (bystanders !== 0) {
+    problems.push(`expected 0 bystanders, got ${bystanders}`);
+  }
+  const expectedClones = Array.isArray(fixture.expectedClones) ? fixture.expectedClones : [];
+  const expected = [...expectedClones].sort();
+  const actual = [...clones].sort();
+  if (
+    expected.length === 0 ||
+    expected.length !== actual.length ||
+    expected.some((kind, i) => kind !== actual[i])
+  ) {
+    problems.push(
+      `expected clones [${expectedClones.join(", ")}], got [${clones.join(", ")}]`,
+    );
+  }
+  return { families, bystanders, clones, problems };
+}
+
 function checkFixtures(fixtures) {
   let ok = true;
   for (const fixture of fixtures) {
-    const dir = createFixtureRepo(fixture, { skillDir: SKILL_DIR, skillName: SKILL_NAME });
-    try {
-      const summary = review({ cwd: dir });
-      const families = summary.families.length;
-      const bystanders = summary.bystanders.count;
-      const kinds = summary.families
-        .flatMap((f) => f.clones)
-        .map((c) => (c.method ? `${c.kind}/${c.method}` : c.kind));
-      console.log(
-        `${fixture.name} (${fixture.expected}): families=${families} bystanders=${bystanders} clones=[${kinds.join(", ")}]`,
-      );
-      if (families !== 1) {
-        console.error(`  FAIL: expected 1 touched family, got ${families}`);
-        ok = false;
-      }
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+    const { families, bystanders, clones, problems } = checkFixture(fixture);
+    console.log(
+      `${fixture.name} (${fixture.expected}): families=${families} bystanders=${bystanders} clones=[${clones.join(", ")}]`,
+    );
+    for (const problem of problems) {
+      console.error(`  FAIL: ${problem}`);
+      ok = false;
     }
   }
   if (!ok) process.exit(1);
