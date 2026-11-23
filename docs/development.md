@@ -1,6 +1,6 @@
 # Development
 
-This page covers running tests, running ruling stability evals, updating the pinned `jscpd` version, and versioning releases of `duplication-review`. For repository conventions and `jscpd` quirks verified against the pinned version, see [AGENTS.md](../AGENTS.md).
+This page covers running tests, running evals for the stability of the ruling, updating the pinned `jscpd` version, and versioning releases of `duplication-review`. For repository conventions and `jscpd` quirks verified against the pinned version, see [AGENTS.md](../AGENTS.md).
 
 ## Running tests
 

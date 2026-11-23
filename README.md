@@ -90,4 +90,4 @@ Pairs with [code-refactor-review](https://github.com/xpepper/code-refactor-revie
 node --test 'tests/*.test.mjs'
 ```
 
-See [Development](docs/development.md) for test prerequisites, ruling stability evals, CI, bumping the pinned `jscpd` version, and semantic versioning rules.
+See [Development](docs/development.md) for test prerequisites, evals for the stability of the ruling, CI, bumping the pinned `jscpd` version, and semantic versioning rules.
