@@ -650,8 +650,9 @@ for (const source of [".jscpd.json", "package.json"]) {
 // A gap setting would merge the two renamed blocks of the server fixture into
 // one similar clone, which the renamed scan's --kind renamed then drops. With
 // no gap, the first scan would split the gap clone of the setup functions into
-// two exact ones, and match the pair by syntax tree instead. Both spellings in one file fail a scan given that file with
-// --config, so the script strips them.
+// two exact ones, and match the pair by syntax tree instead. Both spellings in
+// one file fail a scan given that file with --config, so the script strips
+// them.
 for (const source of [".jscpd.json", "package.json"]) {
   test(`a gap setting in ${source}, in one spelling or both, leaves each scan's own gap`, (t) => {
     writeAll(t, {
