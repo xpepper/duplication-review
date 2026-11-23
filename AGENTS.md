@@ -1,12 +1,13 @@
 # AGENTS.md
 
-How to work in this repo. For an overview and install instructions, see [README.md](README.md). For how the script and skill work in detail, see [docs/how-it-works.md](docs/how-it-works.md); for running tests, bumping jscpd, and versioning, see [docs/development.md](docs/development.md).
+How to work in this repo. For an overview and install instructions, see [README.md](README.md). For how the script and skill work in detail, see [docs/how-it-works.md](docs/how-it-works.md); for running tests and evals, bumping jscpd, and versioning, see [docs/development.md](docs/development.md).
 
 ## Working an issue
 
 - Branch from `main`. If the issue depends on another one, wait until that one is merged.
 - The issue's acceptance criteria are the definition of done.
 - Work test-first for any change to `scripts/clones.mjs`. Run `node --test 'tests/*.test.mjs'`.
+- When a change touches `SKILL.md`'s ruling or report format, or alters the evidence that `scripts/clones.mjs` gives the model, run `node evals/run.mjs` (see [docs/development.md](docs/development.md#running-evals)) before and after on the same `--model` (or compare with a baseline from the same resolved model ID) and record both tables in the PR. Add a fixture in `evals/fixtures.mjs` when introducing a new ruling case. Skip the evals for pure script fixes, refactors, or docs and CI changes.
 - Keep `SKILL.md`, `README.md`, and `docs/how-it-works.md` in step with any change to the script's output.
 - Name scans, clones, families and rulings as [GLOSSARY.md](GLOSSARY.md) does, in code comments, docs and PR text.
 
