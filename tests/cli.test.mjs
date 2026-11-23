@@ -148,6 +148,12 @@ const SERVER_FIXTURE = {
   "src/server_b.js": serverModule("api", "options", 'if (options.verbose) printBanner();\ntrackBoot("api", 2);'),
 };
 
+// Two setup functions that differ by one inserted line: one gap clone.
+const GAP_FIXTURE = {
+  "src/setup_a.js": setupFunction("setupA"),
+  "src/setup_b.js": setupFunction("setupB", "server.use(metrics(config.metricsPath));"),
+};
+
 // A TypeScript class, with a decorator on its first method when one is given.
 const priceController = (decorator) => `export class PriceController {
   constructor(private readonly repository: PriceRepository, private readonly clock: Clock) {}
@@ -185,11 +191,13 @@ function write(path, content) {
 
 const clonesIn = (families) => families.reduce((sum, family) => sum + family.clones.length, 0);
 
-// Whether the families hold a clone of this kind between these two files, in either order.
-const hasClone = (families, kind, paths) =>
+// The clones of this kind that the families hold between these two files, in either order.
+const clonesBetween = (families, kind, paths) =>
   families
     .flatMap((family) => family.clones)
-    .some((clone) => clone.kind === kind && clone.sides.map((side) => side.path).sort().join() === [...paths].sort().join());
+    .filter((clone) => clone.kind === kind && clone.sides.map((side) => side.path).sort().join() === [...paths].sort().join());
+
+const hasClone = (families, kind, paths) => clonesBetween(families, kind, paths).length > 0;
 
 function writeAll(t, files) {
   t.after(() => Object.keys(files).forEach((path) => rmSync(join(repo, path), { force: true })));
@@ -518,8 +526,16 @@ for (const source of [".jscpd.json", "package.json"]) {
 
 // A repo's reportName renames the file jscpd writes. The script names both of
 // its reports on the command line, so the setting changes neither of them.
+// Both spellings in one file fail a scan given that file with --config, so the
+// script strips them.
+const REPORT_NAME_SETTINGS = [
+  { reportName: "custom" },
+  { "report-name": "custom" },
+  { reportName: "custom", "report-name": "custom" },
+];
+
 for (const source of [".jscpd.json", "package.json"]) {
-  for (const setting of [{ reportName: "custom" }, { "report-name": "custom" }]) {
+  for (const setting of REPORT_NAME_SETTINGS) {
     test(`${JSON.stringify(setting)} in ${source} does not change the summary`, (t) => {
       t.after(() => rmSync(join(repo, source), { force: true }));
       write(source, JSON.stringify(configBody(source, {})));
@@ -638,14 +654,25 @@ for (const source of [".jscpd.json", "package.json"]) {
 }
 
 // A gap setting would merge the two renamed blocks of the server fixture into
-// one similar clone, which the renamed scan's --kind renamed then drops.
+// one similar clone, which the renamed scan's --kind renamed then drops. With
+// no gap, the first scan would split the gap clone of the setup functions into
+// two exact ones, and match the pair by syntax tree instead. Both spellings in
+// one file fail a scan given that file with --config, so both are stripped.
 for (const source of [".jscpd.json", "package.json"]) {
-  test(`a gap setting in ${source} does not hide renamed clones`, (t) => {
-    writeAll(t, SERVER_FIXTURE);
+  test(`a gap setting in ${source}, in one spelling or both, leaves each scan's own gap`, (t) => {
+    writeAll(t, { ...SERVER_FIXTURE, ...GAP_FIXTURE });
 
-    const { renamed } = assertSummaryUnchangedBy(t, source, [{ maxGapLines: 3 }, { "max-gap-lines": 3 }]);
+    const { families } = assertSummaryUnchangedBy(t, source, [
+      { maxGapLines: 3 },
+      { "max-gap-lines": 3 },
+      { maxGapLines: 0, "max-gap-lines": 0 },
+    ]);
 
-    assert.equal(renamed.clones, 2);
+    assert.equal(clonesBetween(families, "renamed", ["src/server_a.js", "src/server_b.js"]).length, 2);
+    assert.deepEqual(
+      clonesBetween(families, "similar", ["src/setup_a.js", "src/setup_b.js"]).map((clone) => clone.method),
+      ["gap"],
+    );
   });
 }
 
@@ -844,11 +871,7 @@ test("uncommitted and untracked files count as part of the change", (t) => {
 });
 
 test("a similar clone says whether jscpd merged a gap or matched the syntax tree", (t) => {
-  const added = ["src/quote.js", "src/setup_a.js", "src/setup_b.js"];
-  t.after(() => added.forEach((path) => rmSync(join(repo, path), { force: true })));
-  write("src/quote.js", renamedTotalFunction);
-  write("src/setup_a.js", setupFunction("setupA"));
-  write("src/setup_b.js", setupFunction("setupB", "server.use(metrics(config.metricsPath));"));
+  writeAll(t, { "src/quote.js": renamedTotalFunction, ...GAP_FIXTURE });
 
   const { status, stderr, summary } = run();
   const clonesOf = (path) =>
