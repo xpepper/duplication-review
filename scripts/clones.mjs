@@ -161,13 +161,16 @@ function sameFragment(a, b) {
 
 // A renamed clone repeats a clone of the first scan when it joins the same two
 // places: in either order, each side shares at least half of the longer of the
-// two ranges. Unlike sameFragment, the longer range decides, so a renamed clone
+// two ranges, and the side of the first scan is touched whenever the renamed
+// side is. Unlike sameFragment, the longer range decides, so a renamed clone
 // that spans more than twice the clone it overlaps stays, as evidence of how
-// far the copy reaches.
-function samePair(a, b) {
-  const [a1, a2] = a.sides;
-  const [b1, b2] = b.sides;
-  return (sameSpan(a1, b1) && sameSpan(a2, b2)) || (sameSpan(a1, b2) && sameSpan(a2, b1));
+// far the copy reaches. A renamed clone that touches the change where the clone
+// it overlaps does not stays too, so that the change keeps its family.
+function repeats(renamed, first) {
+  const covered = (side, by) => sameSpan(side, by) && (by.touched || !side.touched);
+  const [r1, r2] = renamed.sides;
+  const [f1, f2] = first.sides;
+  return (covered(r1, f1) && covered(r2, f2)) || (covered(r1, f2) && covered(r2, f1));
 }
 
 function sameSpan(a, b) {
@@ -269,7 +272,7 @@ export function summarize(report, changed, { base, formats, jscpd, reportPath, r
 
   const found = readClones(report.duplicates, changed);
   const added = readClones(renamed?.report.duplicates ?? [], changed).filter(
-    (clone) => !found.some((other) => samePair(clone, other)),
+    (clone) => !found.some((other) => repeats(clone, other)),
   );
   const grouped = candidateFamilies([...found, ...added]);
   const { clones, duplicatedLines, percentage } = report.statistics.total;

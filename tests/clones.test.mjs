@@ -527,6 +527,33 @@ test("a renamed clone more than twice as long as the clone it overlaps is a pair
   assert.deepEqual(fragmentsOf(summary.families[0]), [["src/a.js", 1, 41], ["src/b.js", 1, 41]]);
 });
 
+test("a renamed clone that touches the change where the clone it repeats does not stays, so the change keeps its family", () => {
+  // The exact pair covers lines 1-10, the renamed pair the whole copy, and only line 15 changed.
+  const summary = summarize(
+    report([clone(["src/a.js", 1, 10], ["src/b.js", 1, 10])]),
+    { "src/a.js": [{ start: 15, end: 15 }] },
+    { ...options, renamed: renamedScan([clone(["src/a.js", 1, 20], ["src/b.js", 1, 20])]) },
+  );
+
+  assert.deepEqual(clonesOf(summary.families), [
+    ["renamed", "src/a.js:1-20", "src/b.js:1-20"],
+    ["exact", "src/a.js:1-10", "src/b.js:1-10"],
+  ]);
+  assert.equal(summary.renamed.clones, 1);
+});
+
+test("a renamed clone stays out when the clone it repeats is the one that touches the change", () => {
+  // Only line 1 changed: the exact pair covers it, and the renamed pair starts one line later.
+  const summary = summarize(
+    report([clone(["src/a.js", 1, 12], ["src/b.js", 1, 12])]),
+    { "src/a.js": [{ start: 1, end: 1 }] },
+    { ...options, renamed: renamedScan([clone(["src/a.js", 2, 13], ["src/b.js", 2, 13])]) },
+  );
+
+  assert.deepEqual(clonesOf(summary.families), [["exact", "src/a.js:1-12", "src/b.js:1-12"]]);
+  assert.equal(summary.renamed.clones, 0);
+});
+
 test("a renamed clone is the same pair while each side shares half of the longer range, and not one line longer", () => {
   const first = report([clone(["src/a.js", 1, 10], ["src/b.js", 1, 10])]);
   const changed = { "src/a.js": [{ start: 1, end: Infinity }] };
