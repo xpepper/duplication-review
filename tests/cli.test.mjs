@@ -148,6 +148,12 @@ const SERVER_FIXTURE = {
   "src/server_b.js": serverModule("api", "options", 'if (options.verbose) printBanner();\ntrackBoot("api", 2);'),
 };
 
+// Two setup functions that differ by one inserted line: one gap clone.
+const GAP_FIXTURE = {
+  "src/setup_a.js": setupFunction("setupA"),
+  "src/setup_b.js": setupFunction("setupB", "server.use(metrics(config.metricsPath));"),
+};
+
 // A TypeScript class, with a decorator on its first method when one is given.
 const priceController = (decorator) => `export class PriceController {
   constructor(private readonly repository: PriceRepository, private readonly clock: Clock) {}
@@ -654,11 +660,7 @@ for (const source of [".jscpd.json", "package.json"]) {
 // one file fail a scan given that file with --config, so both are stripped.
 for (const source of [".jscpd.json", "package.json"]) {
   test(`a gap setting in ${source}, in one spelling or both, leaves each scan's own gap`, (t) => {
-    writeAll(t, {
-      ...SERVER_FIXTURE,
-      "src/setup_a.js": setupFunction("setupA"),
-      "src/setup_b.js": setupFunction("setupB", "server.use(metrics(config.metricsPath));"),
-    });
+    writeAll(t, { ...SERVER_FIXTURE, ...GAP_FIXTURE });
 
     const { families } = assertSummaryUnchangedBy(t, source, [
       { maxGapLines: 3 },
@@ -869,11 +871,7 @@ test("uncommitted and untracked files count as part of the change", (t) => {
 });
 
 test("a similar clone says whether jscpd merged a gap or matched the syntax tree", (t) => {
-  const added = ["src/quote.js", "src/setup_a.js", "src/setup_b.js"];
-  t.after(() => added.forEach((path) => rmSync(join(repo, path), { force: true })));
-  write("src/quote.js", renamedTotalFunction);
-  write("src/setup_a.js", setupFunction("setupA"));
-  write("src/setup_b.js", setupFunction("setupB", "server.use(metrics(config.metricsPath));"));
+  writeAll(t, { "src/quote.js": renamedTotalFunction, ...GAP_FIXTURE });
 
   const { status, stderr, summary } = run();
   const clonesOf = (path) =>
