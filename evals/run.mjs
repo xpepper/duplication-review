@@ -62,63 +62,43 @@ function formatDenial(denial) {
   return command ? `${tool}(${command})` : tool;
 }
 
+const other = (reason, model = null) => ({ ruling: "other", model, reason });
+
 /**
  * Classifies one headless claude invocation into Extract, Tolerate, or other
  * with a diagnostic reason when no single ruling could be parsed.
  */
 export function classifyRun(outcome) {
-  if (outcome.signal) {
-    return { ruling: "other", model: null, reason: `claude terminated by ${outcome.signal}` };
-  }
+  if (outcome.signal) return other(`claude terminated by ${outcome.signal}`);
   if (outcome.status !== 0) {
     const detail = firstLine(`${outcome.stderr ?? ""}${outcome.stdout ?? ""}`);
-    return {
-      ruling: "other",
-      model: null,
-      reason: `claude exited with ${outcome.status}${detail ? `: ${detail}` : ""}`,
-    };
+    return other(`claude exited with ${outcome.status}${detail ? `: ${detail}` : ""}`);
   }
 
   let payload;
   try {
     payload = JSON.parse(outcome.stdout);
   } catch {
-    return { ruling: "other", model: null, reason: "invalid JSON from claude" };
+    return other("invalid JSON from claude");
   }
 
   const model = resolvedModel(payload);
   if (payload?.is_error) {
     const message = firstLine(payload.result);
-    return {
-      ruling: "other",
-      model,
-      reason: `claude reported an error${message ? `: ${message}` : ""}`,
-    };
+    return other(`claude reported an error${message ? `: ${message}` : ""}`, model);
   }
 
   const rulings = parseRulings(payload?.result ?? "");
   if (rulings.length === 0) {
     const denials = Array.isArray(payload?.permission_denials) ? payload.permission_denials : [];
     if (denials.length > 0) {
-      return {
-        ruling: "other",
-        model,
-        reason: `permission denied: ${denials.map(formatDenial).join(", ")}`,
-      };
+      return other(`permission denied: ${denials.map(formatDenial).join(", ")}`, model);
     }
     const snippet = firstLine(payload?.result);
-    return {
-      ruling: "other",
-      model,
-      reason: `no parsable ruling heading${snippet ? ` (got: ${snippet})` : ""}`,
-    };
+    return other(`no parsable ruling heading${snippet ? ` (got: ${snippet})` : ""}`, model);
   }
   if (rulings.length > 1) {
-    return {
-      ruling: "other",
-      model,
-      reason: `expected 1 ruling, found ${rulings.length} (${rulings.join(", ")})`,
-    };
+    return other(`expected 1 ruling, found ${rulings.length} (${rulings.join(", ")})`, model);
   }
   return { ruling: rulings[0], model, reason: null };
 }
@@ -215,8 +195,9 @@ export function parseArgs(argv, fixtureNames) {
     }
     if (arg === "--fixture") {
       const value = argv[++i];
-      if (!value) throw new Failure("Missing value for --fixture.");
-      for (const name of value.split(",").filter(Boolean)) {
+      const names = (value ?? "").split(",").filter(Boolean);
+      if (names.length === 0) throw new Failure("Missing value for --fixture.");
+      for (const name of names) {
         if (!fixtureNames.includes(name)) {
           throw new Failure(
             `Unknown fixture '${name}'. Available: ${fixtureNames.join(", ")}.`,

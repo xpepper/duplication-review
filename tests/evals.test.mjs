@@ -236,6 +236,7 @@ test("parseArgs rejects invalid --runs, unknown fixtures, and unknown flags", ()
   assert.throws(() => parseArgs(["--runs", "1.5"], names), /positive integer/);
   assert.throws(() => parseArgs(["--runs", "abc"], names), /positive integer/);
   assert.throws(() => parseArgs(["--runs"], names), /positive integer|incomplete/);
+  assert.throws(() => parseArgs(["--fixture", ","], names), /Missing value for --fixture/);
   assert.throws(() => parseArgs(["--fixture", "missing"], names), /Unknown fixture 'missing'/);
   assert.throws(() => parseArgs(["--bogus"], names), /Unknown or incomplete option/);
 });
