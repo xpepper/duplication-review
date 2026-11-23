@@ -388,11 +388,11 @@ function readReport(outDir, name) {
 // scan. historyEvery and historyLimit only sample those commits and do nothing
 // on their own, so they need no entry. The ignoreIdentifiers, ignoreLiterals
 // and ignoreAnnotations settings make jscpd match code after normalizing names,
-// literals or decorators. It then pairs each copy with one anchor, so a
-// normalized copy that sorts first takes the place of an exact pair whose whole
-// range it matches, and the summary loses its strongest evidence. jscpd 5.4.3
-// reads these camelCase names from .jscpd.json, .config/jscpd.json,
-// .config/.jscpd.json and package.json, and the kebab-case aliases listed here.
+// literals or decorators, and an exact pair can then give way to normalized
+// ones, as the comment above RENAMED_SCAN explains. The summary would lose its
+// strongest evidence. jscpd 5.4.3 reads these camelCase names from .jscpd.json,
+// .config/jscpd.json, .config/.jscpd.json and package.json, and the kebab-case
+// aliases listed here.
 // It calls fail-on-empty an unknown field but still applies it. It does not
 // read snake_case spellings (history_since, ignore_identifiers, ignore_literals
 // and ignore_annotations were tried), or any other spelling of absolute,
