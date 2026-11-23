@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // Finds the clones a change is involved in: resolves the diff base, lists the
-// changed line ranges, runs jscpd over the whole tree, groups its clones into
-// families and splits them into those touching the change and the rest.
-// Prints a JSON summary.
+// changed line ranges, runs jscpd over the whole tree, once more with names
+// normalized, groups the clones into families and splits them into those
+// touching the change and the rest. Prints a JSON summary.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// Pinned so the same repo gives the same report over time. README "Development"
+// Pinned so the same repo gives the same report over time. docs/development.md
 // says how to bump it.
 export const JSCPD_VERSION = "5.4.3";
 const JSCPD = `jscpd@${JSCPD_VERSION}`;
@@ -156,11 +156,31 @@ const largestFirst = (sizeKey, itemsKey) => (a, b) => {
 // and the two sides of a clone that overlaps itself become one. The model
 // splits such a family.
 function sameFragment(a, b) {
-  if (a.path !== b.path) return false;
-  const shared = Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
-  const shorter = Math.min(a.end - a.start, b.end - b.start) + 1;
-  return shared * 2 >= shorter;
+  return a.path === b.path && sharedLines(a, b) * 2 >= Math.min(lineCount(a), lineCount(b));
 }
+
+// A renamed clone repeats a clone of the first scan when it joins the same two
+// places: in either order, each side shares at least half of the longer of the
+// two ranges, and the side of the first scan is touched whenever the renamed
+// side is. Unlike sameFragment, the longer range decides, so a renamed clone
+// that spans more than twice the clone it overlaps stays, as evidence of how
+// far the copy reaches. A renamed clone that touches the change where the clone
+// it overlaps does not stays too, so that the change keeps its family.
+function repeats(renamed, first) {
+  const covered = (side, by) => sameSpan(side, by) && (by.touched || !side.touched);
+  const [r1, r2] = renamed.sides;
+  const [f1, f2] = first.sides;
+  return (covered(r1, f1) && covered(r2, f2)) || (covered(r1, f2) && covered(r2, f1));
+}
+
+function sameSpan(a, b) {
+  return a.path === b.path && sharedLines(a, b) * 2 >= Math.max(lineCount(a), lineCount(b));
+}
+
+// The lines that two ranges in one file have in common, zero or less when none.
+const sharedLines = (a, b) => Math.min(a.end, b.end) - Math.max(a.start, b.start) + 1;
+
+const lineCount = (range) => range.end - range.start + 1;
 
 /**
  * Groups clones into candidate families: fragments are nodes, clones are
@@ -231,29 +251,37 @@ function byPosition(a, b) {
 }
 
 /**
- * Builds the summary from jscpd's report and the changed line ranges. With no
- * formats to scan there is no report, and the summary is empty.
+ * Builds the summary from jscpd's report and the changed line ranges, adding
+ * the clones of the renamed scan that the first scan did not report. The totals
+ * are the first scan's. With no formats to scan there is no report, and the
+ * summary is empty.
  */
-export function summarize(report, changed, { base, formats, jscpd, reportPath }) {
+export function summarize(report, changed, { base, formats, jscpd, reportPath, renamed }) {
   const summary = {
     jscpd,
     base,
     changedFiles: Object.keys(changed).length,
     formats,
     report: null,
-    totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
+    totals: { clones: 0, duplicatedLines: 0, percentage: 0, kinds: [...FIRST_SCAN_KINDS] },
+    renamed: { report: null, clones: 0 },
     families: [],
     bystanders: { count: 0, clones: 0, largest: [] },
   };
   if (formats.length === 0) return summary;
 
-  const grouped = candidateFamilies(readClones(report.duplicates, changed));
+  const found = readClones(report.duplicates, changed);
+  const added = readClones(renamed?.report.duplicates ?? [], changed).filter(
+    (clone) => !found.some((other) => repeats(clone, other)),
+  );
+  const grouped = candidateFamilies([...found, ...added]);
   const { clones, duplicatedLines, percentage } = report.statistics.total;
 
   return {
     ...summary,
     report: reportPath,
-    totals: { clones, duplicatedLines, percentage },
+    totals: { ...summary.totals, clones, duplicatedLines, percentage },
+    renamed: { report: renamed?.path ?? null, clones: added.length },
     families: grouped.involved,
     bystanders: {
       count: grouped.bystanders.length,
@@ -355,16 +383,21 @@ function readReport(outDir, name) {
 // dead-code report instead of a clone report, and kind drops the clones of
 // other kinds (or fails the scan when it is not a list). The history and
 // historySince settings make jscpd rescan past commits in temporary worktrees,
-// which slows both scans and adds a history field to the report that the
+// which slows every scan and adds a history field to the report that the
 // script does not read. A range or date that selects no commits fails the
 // scan. historyEvery and historyLimit only sample those commits and do nothing
-// on their own, so they need no entry. jscpd 5.4.3 reads these camelCase
-// names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json and
-// package.json, and the kebab-case aliases listed here. It calls fail-on-empty
-// an unknown field but still applies it. It does not read snake_case
-// spellings (history_since was tried), or any other spelling of absolute,
-// semantic or kind (semanticEnabled, semantic-enabled and kinds were tried),
-// so they need no entry.
+// on their own, so they need no entry. The ignoreIdentifiers, ignoreLiterals
+// and ignoreAnnotations settings make jscpd match code after normalizing names,
+// literals or decorators, and an exact pair can then give way to normalized
+// ones, as the comment above RENAMED_SCAN explains. The summary would lose its
+// strongest evidence. jscpd 5.4.3 reads these camelCase names from .jscpd.json,
+// .config/jscpd.json, .config/.jscpd.json and package.json, and the kebab-case
+// aliases listed here.
+// It calls fail-on-empty an unknown field but still applies it. It does not
+// read snake_case spellings (history_since, ignore_identifiers, ignore_literals
+// and ignore_annotations were tried), or any other spelling of absolute,
+// semantic or kind (semanticEnabled, semantic-enabled and kinds were tried), so
+// they need no entry.
 const STRIPPED_CONFIG_KEYS = new Set([
   "absolute",
   "semantic",
@@ -374,6 +407,12 @@ const STRIPPED_CONFIG_KEYS = new Set([
   "history",
   "historySince",
   "history-since",
+  "ignoreIdentifiers",
+  "ignore-identifiers",
+  "ignoreLiterals",
+  "ignore-literals",
+  "ignoreAnnotations",
+  "ignore-annotations",
   "threshold",
   "exitCode",
   "exit-code",
@@ -450,15 +489,31 @@ function formatsOf(root, outDir, onDisk, configArgs) {
   return Object.keys(report.statistics.formats).sort();
 }
 
-function detect(root, outDir, formats, configArgs) {
+// The first scan finds exact clones, and similar ones that jscpd merges across a
+// short gap or matches by syntax tree. Its statistics are the summary's totals.
+const FIRST_SCAN = ["--similarity", "--max-gap-lines", "3"];
+const FIRST_SCAN_KINDS = ["exact", "similar"];
+
+// The second scan finds clones that differ only in names (Type-2), such as
+// copied test setup or top-level code, which the syntax-tree matching of the
+// first scan leaves out. With names normalized, jscpd pairs each copy with one
+// anchor, so a renamed copy that sorts first takes the place of an exact pair
+// whose whole range it matches. The first scan keeps the exact evidence, and
+// this one only adds to it. A gap setting in the repo's config would merge its
+// clones into similar ones, which --kind renamed then drops, so gaps are
+// switched off.
+const RENAMED_SCAN = ["--ignore-identifiers=consistent", "--max-gap-lines", "0", "--kind", "renamed"];
+
+// Scans the whole tree in the given formats and returns jscpd's report.
+function detect(root, outDir, formats, configArgs, name, flags) {
   jscpd(root, [
     ".",
     ...configArgs,
     "--format", formats.join(","),
-    "--similarity", "--max-gap-lines", "3",
-    "--reporters", "json", "--output", outDir, "--report-name", "jscpd-report",
+    ...flags,
+    "--reporters", "json", "--output", outDir, "--report-name", name,
   ]);
-  return readReport(outDir, "jscpd-report");
+  return readReport(outDir, name);
 }
 
 export function review({ cwd = process.cwd(), base: requested } = {}) {
@@ -475,10 +530,13 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const discovered = onDisk.length > 0 ? repoConfig(root) : null;
   const configArgs = discovered ? writeSanitizedConfig(discovered.config, outDir) : [];
 
-  let formats, detected;
+  let formats, detected, renamed;
   try {
     formats = onDisk.length > 0 ? formatsOf(root, outDir, onDisk, configArgs) : [];
-    detected = formats.length > 0 ? detect(root, outDir, formats, configArgs) : null;
+    if (formats.length > 0) {
+      detected = detect(root, outDir, formats, configArgs, "jscpd-report", FIRST_SCAN);
+      renamed = detect(root, outDir, formats, configArgs, "renamed-report", RENAMED_SCAN);
+    }
   } catch (error) {
     // jscpd's messages name the sanitized copy, which is not the file to fix.
     if (!discovered || !(error instanceof Failure)) throw error;
@@ -492,6 +550,7 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
     formats,
     jscpd: JSCPD_VERSION,
     reportPath: detected?.path,
+    renamed,
   });
 }
 

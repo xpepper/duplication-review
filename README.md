@@ -72,7 +72,7 @@ flowchart TD
     G --> R
 ```
 
-The script scans the whole repository, not just the diff, so it catches new code copied from existing files. It runs [jscpd](https://github.com/kucherenko/jscpd) only in the languages of the changed files, includes structural matches for renamed copies, honors the repository's own ignore rules and minimum clone sizes, and prints a JSON summary.
+The script scans the whole repository, not just the diff, so it catches new code copied from existing files. It runs [jscpd](https://github.com/kucherenko/jscpd) only in the languages of the changed files, finds copies whose names changed (by syntax tree, and by a second scan with names normalized), honors the repository's own ignore rules and minimum clone sizes, and prints a JSON summary.
 
 The agent opens every fragment in the touched families, merges two families when one element would retire both, or splits one when no single element fits all its fragments. It then rules **Extract** or **Tolerate** on each family and lists the largest untouched families as follow-ups.
 

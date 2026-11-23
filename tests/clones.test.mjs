@@ -440,7 +440,7 @@ test("totals come from the report and equal the clones in families plus bystande
     options,
   );
 
-  assert.deepEqual(summary.totals, { clones: 3, duplicatedLines: 27, percentage: 30 });
+  assert.deepEqual(summary.totals, { clones: 3, duplicatedLines: 27, percentage: 30, kinds: ["exact", "similar"] });
   assert.equal(summary.families.length, 1);
   assert.equal(clonesIn(summary.families) + summary.bystanders.clones, summary.totals.clones);
 });
@@ -472,10 +472,118 @@ test("with no formats to scan the summary is empty and needs no report", () => {
     changedFiles: 1,
     formats: [],
     report: null,
-    totals: { clones: 0, duplicatedLines: 0, percentage: 0 },
+    totals: { clones: 0, duplicatedLines: 0, percentage: 0, kinds: ["exact", "similar"] },
+    renamed: { report: null, clones: 0 },
     families: [],
     bystanders: { count: 0, clones: 0, largest: [] },
   });
+});
+
+// The renamed scan's report, as review() passes it to summarize.
+const renamedScan = (duplicates) => ({
+  path: "/out/renamed-report.json",
+  report: report(duplicates.map((duplicate) => ({ ...duplicate, kind: "renamed" }))),
+});
+
+const clonesOf = (families) =>
+  families
+    .flatMap((family) => family.clones)
+    .map((c) => [c.kind, ...c.sides.map((s) => `${s.path}:${s.start}-${s.end}`)]);
+
+test("a pair that both scans report appears once, with the first scan's kind", () => {
+  const changed = { "src/a.js": [{ start: 1, end: Infinity }] };
+  const summary = summarize(
+    report([clone(["src/a.js", 1, 12], ["src/b.js", 1, 12], { kind: "similar", method: "ast", similarity: 1 })]),
+    changed,
+    {
+      ...options,
+      // The same pair the other way round with shifted ranges, and a pair that shares only one side with it.
+      renamed: renamedScan([
+        clone(["src/b.js", 2, 13], ["src/a.js", 1, 13]),
+        clone(["src/a.js", 1, 12], ["src/c.js", 1, 12]),
+      ]),
+    },
+  );
+
+  assert.deepEqual(clonesOf(summary.families), [
+    ["similar", "src/a.js:1-12", "src/b.js:1-12"],
+    ["renamed", "src/a.js:1-12", "src/c.js:1-12"],
+  ]);
+  assert.equal(summary.renamed.clones, 1);
+});
+
+test("a renamed clone more than twice as long as the clone it overlaps is a pair of its own", () => {
+  // The first scan found an exact core; with names normalized, jscpd found the whole copy around it.
+  const summary = summarize(
+    report([clone(["src/a.js", 11, 30], ["src/b.js", 11, 30])]),
+    { "src/a.js": [{ start: 1, end: Infinity }] },
+    { ...options, renamed: renamedScan([clone(["src/a.js", 1, 41], ["src/b.js", 1, 41])]) },
+  );
+
+  assert.deepEqual(clonesOf(summary.families), [
+    ["renamed", "src/a.js:1-41", "src/b.js:1-41"],
+    ["exact", "src/a.js:11-30", "src/b.js:11-30"],
+  ]);
+  assert.deepEqual(fragmentsOf(summary.families[0]), [["src/a.js", 1, 41], ["src/b.js", 1, 41]]);
+});
+
+test("a renamed clone that touches the change where the clone it repeats does not stays, so the change keeps its family", () => {
+  // The exact pair covers lines 1-10, the renamed pair the whole copy, and only line 15 changed.
+  const summary = summarize(
+    report([clone(["src/a.js", 1, 10], ["src/b.js", 1, 10])]),
+    { "src/a.js": [{ start: 15, end: 15 }] },
+    { ...options, renamed: renamedScan([clone(["src/a.js", 1, 20], ["src/b.js", 1, 20])]) },
+  );
+
+  assert.deepEqual(clonesOf(summary.families), [
+    ["renamed", "src/a.js:1-20", "src/b.js:1-20"],
+    ["exact", "src/a.js:1-10", "src/b.js:1-10"],
+  ]);
+  assert.equal(summary.renamed.clones, 1);
+});
+
+test("a renamed clone stays out when the clone it repeats is the one that touches the change", () => {
+  // Only line 1 changed: the exact pair covers it, and the renamed pair starts one line later.
+  const summary = summarize(
+    report([clone(["src/a.js", 1, 12], ["src/b.js", 1, 12])]),
+    { "src/a.js": [{ start: 1, end: 1 }] },
+    { ...options, renamed: renamedScan([clone(["src/a.js", 2, 13], ["src/b.js", 2, 13])]) },
+  );
+
+  assert.deepEqual(clonesOf(summary.families), [["exact", "src/a.js:1-12", "src/b.js:1-12"]]);
+  assert.equal(summary.renamed.clones, 0);
+});
+
+test("a renamed clone is the same pair while each side shares half of the longer range, and not one line longer", () => {
+  const first = report([clone(["src/a.js", 1, 10], ["src/b.js", 1, 10])]);
+  const changed = { "src/a.js": [{ start: 1, end: Infinity }] };
+  const withRenamedTo = (end) =>
+    summarize(first, changed, { ...options, renamed: renamedScan([clone(["src/a.js", 1, end], ["src/b.js", 1, end])]) });
+
+  assert.equal(withRenamedTo(20).renamed.clones, 0, "10 of 20 lines shared");
+  assert.equal(withRenamedTo(21).renamed.clones, 1, "10 of 21 lines shared");
+});
+
+test("totals count the first scan, and families and bystanders add the renamed clones", () => {
+  const changed = { "src/a.js": [{ start: 1, end: 3 }] };
+  const summary = summarize(
+    report(
+      [clone(["src/a.js", 1, 9], ["src/b.js", 1, 9]), clone(["src/x.js", 1, 9], ["src/y.js", 1, 9])],
+      { duplicatedLines: 18, percentage: 20 },
+    ),
+    changed,
+    {
+      ...options,
+      renamed: renamedScan([clone(["src/a.js", 1, 9], ["src/c.js", 1, 9]), clone(["src/p.js", 1, 9], ["src/q.js", 1, 9])]),
+    },
+  );
+
+  assert.deepEqual(summary.totals, { clones: 2, duplicatedLines: 18, percentage: 20, kinds: ["exact", "similar"] });
+  assert.deepEqual(summary.renamed, { report: "/out/renamed-report.json", clones: 2 });
+  assert.equal(
+    clonesIn(summary.families) + summary.bystanders.clones,
+    summary.totals.clones + summary.renamed.clones,
+  );
 });
 
 function tempDir(t) {
