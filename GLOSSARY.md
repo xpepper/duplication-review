@@ -21,7 +21,7 @@ The clone scan that finds exact and similar clones. Its statistics are the revie
 _Avoid_: second pass, main scan
 
 **Second scan**:
-The clone scan that finds renamed clones, with names normalized. It only adds clones that the first scan did not report.
+The clone scan that finds renamed clones, with identifiers normalized. The review keeps only the clones from it that the first scan did not report.
 _Avoid_: renamed scan, third pass
 
 **Sanitized config**:
@@ -34,21 +34,26 @@ _Avoid_: config copy, sanitized copy
 A pair of copies that jscpd reports, one on each side.
 _Avoid_: duplicate, match, pair (alone)
 
+**Side**:
+One of the two file-and-line ranges of a clone. jscpd itself calls this a fragment.
+_Avoid_: half, fragment (when one clone's range is meant)
+
 **Exact clone**:
 A clone whose sides match token for token.
 
 **Similar clone**:
-A clone whose sides match by structure, or as token runs merged across a short gap of lines that differ.
+A clone whose sides are functions that match by normalized syntax-tree structure (`ast`), or token runs merged across a short gap of lines that differ (`gap`).
+_Avoid_: near-miss clone
 
 **Renamed clone**:
-A clone whose sides match token for token once each name on one side stands for one name on the other.
+A clone whose sides match token for token once each identifier on one side stands for one identifier on the other, while literals still match. Narrower than jscpd's `renamed` kind, which also covers normalized literals and annotations.
 
 **Fragment**:
-One place where a copy lives: the clone sides in one file that share at least half of the shorter one.
+One place in a file that a family covers, formed by merging clone sides in that file that share at least half of the shorter one. Unlike jscpd's fragment, it can span several sides.
 _Avoid_: copy, occurrence, side (when several sides are meant)
 
 **Touched**:
-Said of a fragment that overlaps the change, or that spans a line that the change deleted.
+Said of a side or fragment that overlaps the change, or that straddles a deletion in the change.
 
 **Family**:
 The fragments that clones join, which one shared element might retire.
@@ -60,11 +65,12 @@ _Avoid_: untouched family
 
 **Origin**:
 How a clone relates to the change: introduced, pre-existing-edited or pre-existing.
+_Avoid_: new clone
 
 ## Ruling
 
 **Ruling**:
-The verdict on one family: Extract or Tolerate.
+The judgment on one family: Extract or Tolerate.
 _Avoid_: decision, verdict
 
 **Extract**:
