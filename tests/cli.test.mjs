@@ -899,6 +899,26 @@ test("a renamed copy of top-level code is found block by block", (t) => {
   );
 });
 
+// The first scan merges the two exact blocks of these copies across the
+// literal lines into one gap clone. The shorter block, after the gap, is less
+// than half of that clone, so it would not count as a repeat of it.
+test("the second scan adds no exact block of a gap clone from the first", (t) => {
+  writeAll(t, {
+    "src/boot_a.js": serverModule("app", "settings", 'logStartup("a");\ntrackBoot("web", 2);'),
+    "src/boot_b.js": serverModule("app", "settings", 'logStartup("b");\ntrackBoot("api", 3);'),
+  });
+
+  const { status, stderr, summary } = run();
+  const boot = summary.families.filter((f) => f.fragments.some((x) => x.path === "src/boot_a.js"));
+
+  assert.equal(status, 0, stderr);
+  assert.equal(summary.renamed.clones, 0);
+  assert.deepEqual(
+    boot.map((f) => f.clones.map((clone) => [clone.kind, clone.method, ...clone.sides.map((side) => side.path)])),
+    [[["similar", "gap", "src/boot_a.js", "src/boot_b.js"]]],
+  );
+});
+
 test("an explicit base narrows the change to what came after it", () => {
   const { summary } = run(["--base", "HEAD"]);
 
