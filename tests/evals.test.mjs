@@ -106,6 +106,32 @@ test("classifyRun reads a single Extract or Tolerate ruling and resolved model",
   });
 });
 
+test("classifyRun picks the modelUsage entry with the most outputTokens", () => {
+  const withHelper = classifyRun(
+    jsonOutcome({
+      is_error: false,
+      result: "### priceItems: Extract\nReason.",
+      modelUsage: {
+        "claude-haiku-4-5": { inputTokens: 200, outputTokens: 12 },
+        "claude-sonnet-5-5": { inputTokens: 800, outputTokens: 420 },
+      },
+    }),
+  );
+  assert.equal(withHelper.model, "claude-sonnet-5-5");
+
+  const withoutTokens = classifyRun(
+    jsonOutcome({
+      is_error: false,
+      result: "### priceItems: Extract\nReason.",
+      modelUsage: {
+        "claude-sonnet-5-5": {},
+        "claude-haiku-4-5": {},
+      },
+    }),
+  );
+  assert.equal(withoutTokens.model, "claude-sonnet-5-5");
+});
+
 test("classifyRun counts unparsable, multi-ruling, and failed runs as other", () => {
   const noHeading = classifyRun(
     jsonOutcome({

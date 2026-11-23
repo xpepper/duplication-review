@@ -45,8 +45,19 @@ export function parseRulings(text) {
 
 function resolvedModel(payload) {
   if (payload?.modelUsage && typeof payload.modelUsage === "object") {
-    const models = Object.keys(payload.modelUsage);
-    if (models.length > 0) return models[0];
+    const entries = Object.entries(payload.modelUsage);
+    if (entries.length > 0) {
+      let [bestModel, bestUsage] = entries[0];
+      let bestTokens = Number.isFinite(bestUsage?.outputTokens) ? bestUsage.outputTokens : -1;
+      for (const [model, usage] of entries.slice(1)) {
+        const tokens = Number.isFinite(usage?.outputTokens) ? usage.outputTokens : -1;
+        if (tokens > bestTokens) {
+          bestModel = model;
+          bestTokens = tokens;
+        }
+      }
+      return bestModel;
+    }
   }
   return typeof payload?.model === "string" ? payload.model : null;
 }
