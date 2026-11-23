@@ -520,8 +520,16 @@ for (const source of [".jscpd.json", "package.json"]) {
 
 // A repo's reportName renames the file jscpd writes. The script names both of
 // its reports on the command line, so the setting changes neither of them.
+// Both spellings in one file fail a scan given that file with --config, so the
+// script strips them.
+const REPORT_NAME_SETTINGS = [
+  { reportName: "custom" },
+  { "report-name": "custom" },
+  { reportName: "custom", "report-name": "custom" },
+];
+
 for (const source of [".jscpd.json", "package.json"]) {
-  for (const setting of [{ reportName: "custom" }, { "report-name": "custom" }]) {
+  for (const setting of REPORT_NAME_SETTINGS) {
     test(`${JSON.stringify(setting)} in ${source} does not change the summary`, (t) => {
       t.after(() => rmSync(join(repo, source), { force: true }));
       write(source, JSON.stringify(configBody(source, {})));

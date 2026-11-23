@@ -390,11 +390,12 @@ function readReport(outDir, name) {
 // and ignoreAnnotations settings make jscpd match code after normalizing names,
 // literals or decorators, and an exact pair can then give way to normalized
 // ones, as the comment above RENAMED_SCAN explains. The summary would lose its
-// strongest evidence. Each scan sets its own gap with --max-gap-lines, which
-// overrides a maxGapLines setting, but a file that spells it both ways fails
-// the scan with a duplicate field. jscpd 5.4.3 reads these camelCase names
-// from .jscpd.json, .config/jscpd.json, .config/.jscpd.json and package.json,
-// and the kebab-case aliases listed here.
+// strongest evidence. Each scan sets its own gap with --max-gap-lines, and
+// every jscpd call names its report with --report-name. Each flag overrides
+// the maxGapLines or reportName setting, but a file that spells one of them
+// both ways fails the scan with a duplicate field. jscpd 5.4.3 reads these
+// camelCase names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json
+// and package.json, and the kebab-case aliases listed here.
 // It calls fail-on-empty an unknown field but still applies it. It does not
 // read snake_case spellings (history_since, ignore_identifiers, ignore_literals
 // and ignore_annotations were tried), or any other spelling of absolute,
@@ -417,6 +418,8 @@ const STRIPPED_CONFIG_KEYS = new Set([
   "ignore-annotations",
   "maxGapLines",
   "max-gap-lines",
+  "reportName",
+  "report-name",
   "threshold",
   "exitCode",
   "exit-code",
