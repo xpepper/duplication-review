@@ -403,6 +403,8 @@ function main(argv) {
   }
 }
 
+// Node resolves symlinks in import.meta.url but not in process.argv[1], so
+// compare real paths when invoked through a symlinked path.
 function runAsScript() {
   const entry = process.argv[1];
   return Boolean(entry) && import.meta.url === pathToFileURL(realpathSync(entry)).href;
