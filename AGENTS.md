@@ -29,3 +29,17 @@ Checked against jscpd 5.4.3 with a scratch repository. Check them again after a 
 - That message does not prove jscpd ignores the key. It calls `fail-on-empty` an unknown field and still applies it: a scan that finds no files then exits 1, as with `failOnEmpty`. Test what a key does, not what jscpd says about it.
 - jscpd looks for `--semantic` embedding models under `JSCPD_CACHE_DIR` when it is set. A test that sets it to an empty directory gets the same "model is not downloaded" failure on every machine, and nothing is downloaded.
 - An `Error: ...` line (a missing path, an unsupported `--format`, an unknown baseline ref) comes with exit code 1. A bad CLI flag prints a lowercase `error:` and exits 2.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues, through the `gh` CLI. See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+The five triage roles use their default names: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` at the root and ADRs under `docs/adr/`. See [docs/agents/domain.md](docs/agents/domain.md).
