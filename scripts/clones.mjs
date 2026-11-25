@@ -252,9 +252,10 @@ function byPosition(a, b) {
 
 /**
  * Builds the summary from jscpd's report and the changed line ranges, adding
- * the clones of the renamed scan that the first scan did not report. The totals
- * are the first scan's. With no formats to scan there is no report, and the
- * summary is empty.
+ * the clones of the second scan that the first scan did not report. The totals
+ * are the first scan's, and each entry in bystanders.largest reports its clone
+ * count rather than the list. With no formats to scan there is no report, and
+ * the summary is empty.
  */
 export function summarize(report, changed, { base, formats, jscpd, reportPath, renamed }) {
   const summary = {
@@ -286,7 +287,9 @@ export function summarize(report, changed, { base, formats, jscpd, reportPath, r
     bystanders: {
       count: grouped.bystanders.length,
       clones: grouped.bystanders.reduce((sum, family) => sum + family.clones.length, 0),
-      largest: grouped.bystanders.slice(0, LARGEST_BYSTANDERS),
+      largest: grouped.bystanders
+        .slice(0, LARGEST_BYSTANDERS)
+        .map((family) => ({ ...family, clones: family.clones.length })),
     },
   };
 }

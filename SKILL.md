@@ -6,7 +6,7 @@ disable-model-invocation: true
 compatibility: Needs git and Node 22 or later (node, npx) to run the bundled script and jscpd; gh when given a PR number.
 metadata:
   author: Pietro Di Bello
-  version: "1.2.1"
+  version: "2.0.0"
 allowed-tools: Bash(git *) Bash(gh pr view *) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs *) Read
 ---
 
@@ -26,7 +26,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
    Pass `--base` for a PR; without it the script uses the remote's default branch. It diffs from the merge base (uncommitted and untracked files included), runs jscpd over the whole tree in the languages of the changed files, then once more with names normalized to find `renamed` clones, and prints JSON:
    - `families`: the candidate families of clones in which at least one fragment overlaps a changed line range. `touched` marks that fragment. Each family gives the `lines` of its largest clone and its `duplicatedLines`, the sum of its fragments' lines, which orders the families largest first. It also lists its `fragments` (the places the copy lives, as `path`, `start` and `end`) and its `clones` (jscpd's pairs between them, with `kind` and `origin`, plus `method` and `similarity` on a `similar` clone). Sides in one file that share at least half of the shorter one count as one fragment, so a fragment can span more lines than any one of its clones.
-   - `bystanders`: the `count` of families the change does not touch, the number of `clones` in them, and the `largest` families. Leave them out of the verdict.
+   - `bystanders`: the `count` of families the change does not touch, the total number of `clones` in them, and the five `largest` families. Each entry in `largest` keeps `lines`, `duplicatedLines`, and `fragments`, and gives its number of `clones` as a count instead of listing them. Leave them out of the ruling.
    - `totals`: clones, duplicated lines and percentage for the whole tree, from the first scan, which counts the `kinds` `exact` and `similar`. Report them.
    - `renamed`: `clones` is the number of `renamed` clones that the second scan added to `families` and `bystanders`, leaving out the pairs that only repeat a clone of the first scan. Report it next to `totals`.
    - `jscpd`: the jscpd version that ran.
