@@ -50,7 +50,7 @@ For each duplicate pair that `jscpd` reports, the script checks both sides again
 | --- | --- | --- |
 | `introduced` | The change added or modified at least half the lines of one side. | Flags duplication introduced by this change. |
 | `pre-existing-edited` | At least one side overlaps a changed range (or straddles a deletion), but the change wrote less than half of either side. | Prompts the agent to check whether the other copy needs the same edit. |
-| `pre-existing` | Neither side overlaps the diff. | Appears in bystander families or as untouched pairs inside a larger touched family. |
+| `pre-existing` | Neither side overlaps the diff. | Appears on untouched clones inside a larger touched family (bystanders report only a clone count). |
 
 ## 4. Candidate families and bystanders
 
