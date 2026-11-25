@@ -461,6 +461,62 @@ test("bystanders count every untouched family and its clones but list only the f
   assert.equal(bystanders.count, 6);
   assert.equal(bystanders.clones, 7);
   assert.deepEqual(bystanders.largest.map((family) => family.lines), [20, 19, 18, 17, 16]);
+  assert.deepEqual(bystanders.largest.map((family) => family.clones), [1, 1, 1, 1, 1]);
+});
+
+test("bystanders.largest counts each family's clones instead of listing them, keeping fragments and totals intact", () => {
+  const changed = { "src/touched.js": [{ start: 1, end: 12 }] };
+  const exactCopies = Array.from({ length: 12 }, (_, i) => `src/copy${String(i + 1).padStart(2, "0")}.js`);
+  const renamedCopies = Array.from({ length: 3 }, (_, i) => `src/renamed${String(i + 1).padStart(2, "0")}.js`);
+
+  const firstScan = [
+    clone(["src/touched.js", 1, 12], ["src/peer1.js", 1, 12]),
+    clone(["src/touched.js", 1, 12], ["src/peer2.js", 1, 12]),
+    ...exactCopies.map((path) => clone(["src/hub.js", 1, 12], [path, 1, 12])),
+    clone(["src/solo_a.js", 1, 10], ["src/solo_b.js", 1, 10]),
+  ];
+  const secondScan = renamedCopies.map((path) => clone(["src/hub.js", 1, 12], [path, 1, 12]));
+
+  const summary = summarize(report(firstScan), changed, {
+    ...options,
+    renamed: renamedScan(secondScan),
+  });
+
+  const expectedLargeFragments = [...exactCopies, "src/hub.js", ...renamedCopies]
+    .sort()
+    .map((path) => ({ path, start: 1, end: 12, touched: false }));
+
+  assert.equal(summary.families.length, 1);
+  assert.equal(Array.isArray(summary.families[0].clones), true);
+  assert.equal(summary.families[0].clones.length, 2);
+
+  assert.equal(summary.bystanders.count, 2);
+  assert.equal(summary.bystanders.clones, 16);
+  assert.deepEqual(summary.bystanders.largest, [
+    {
+      lines: 12,
+      duplicatedLines: 192,
+      fragments: expectedLargeFragments,
+      clones: 15,
+    },
+    {
+      lines: 10,
+      duplicatedLines: 20,
+      fragments: [
+        { path: "src/solo_a.js", start: 1, end: 10, touched: false },
+        { path: "src/solo_b.js", start: 1, end: 10, touched: false },
+      ],
+      clones: 1,
+    },
+  ]);
+  assert.equal(
+    summary.bystanders.largest.reduce((sum, family) => sum + family.clones, 0),
+    summary.bystanders.clones,
+  );
+  assert.equal(
+    clonesIn(summary.families) + summary.bystanders.clones,
+    summary.totals.clones + summary.renamed.clones,
+  );
 });
 
 test("with no formats to scan the summary is empty and needs no report", () => {

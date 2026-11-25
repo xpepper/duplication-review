@@ -267,10 +267,10 @@ test("a committed copy is involved and an old clone elsewhere is a bystander", (
   );
   assert.equal(summary.families[0].clones[0].origin, "introduced");
   assert.deepEqual(
-    summary.bystanders.largest.map((family) => family.fragments.map((f) => f.path)),
-    [["legacy/export_a.js", "legacy/export_b.js"]],
+    summary.bystanders.largest.map((family) => family.fragments.map((f) => [f.path, f.touched])),
+    [[["legacy/export_a.js", false], ["legacy/export_b.js", false]]],
   );
-  assert.equal(summary.bystanders.largest[0].clones[0].origin, "pre-existing");
+  assert.equal(summary.bystanders.largest[0].clones, 1);
   assert.equal(
     clonesIn(summary.families) + summary.bystanders.clones,
     summary.totals.clones + summary.renamed.clones,
@@ -279,11 +279,13 @@ test("a committed copy is involved and an old clone elsewhere is a bystander", (
 
 test("only the languages of the changed files are scanned", () => {
   const { summary } = run();
-  const formats = [...summary.families, ...summary.bystanders.largest]
-    .flatMap((family) => family.clones)
-    .map((clone) => clone.format);
+  const formats = summary.families.flatMap((family) => family.clones).map((clone) => clone.format);
+  const paths = [...summary.families, ...summary.bystanders.largest].flatMap((family) =>
+    family.fragments.map((f) => f.path),
+  );
 
   assert.deepEqual([...new Set(formats)], ["javascript"]);
+  assert.equal(paths.some((path) => path.endsWith(".py")), false);
   assert.equal(summary.totals.clones, 2, "the Python clone is not counted");
 });
 

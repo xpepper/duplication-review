@@ -50,13 +50,13 @@ For each duplicate pair that `jscpd` reports, the script checks both sides again
 | --- | --- | --- |
 | `introduced` | The change added or modified at least half the lines of one side. | Flags duplication introduced by this change. |
 | `pre-existing-edited` | At least one side overlaps a changed range (or straddles a deletion), but the change wrote less than half of either side. | Prompts the agent to check whether the other copy needs the same edit. |
-| `pre-existing` | Neither side overlaps the diff. | Appears in bystander families or as untouched pairs inside a larger touched family. |
+| `pre-existing` | Neither side overlaps the diff. | Appears on untouched clones inside a larger touched family (bystanders report only a clone count). |
 
 ## 4. Candidate families and bystanders
 
 `jscpd` pairs every copy with one anchor, so a four-way copy arrives as three separate pairs, and line ranges for one copy can shift by a few lines across pairs. To rebuild each group, the script runs two union-find passes. First, it merges two clone sides in the same file into one fragment whenever they share at least half the lines of the shorter side, widening the fragment to cover all merged sides and marking it `touched` if any side overlaps the diff. Second, it treats every clone as an edge between its two fragments, so each connected component becomes a candidate family sorted largest first by `duplicatedLines` (the sum of its fragments' line counts).
 
-Families with at least one `touched` fragment go into `families` for the agent to review. Untouched families go into `bystanders`, summarized as a family count, a clone count, and the five largest families. Because the half-overlap rule is transitive, overlapping copies in one file can chain together or collapse a self-overlapping clone into one wide fragment; the agent inspects the code and splits those families.
+Families with at least one `touched` fragment go into `families` for the agent to review. Families that the change does not touch go into `bystanders`, summarized as a family `count`, a total `clones` count, and the five `largest` families. To keep the summary small when bystanders have many clones, each entry in `bystanders.largest` keeps `lines`, `duplicatedLines`, and `fragments`, and replaces its `clones` list with the integer count of clones in that family. The clone counts across `families` and `bystanders.clones` still add up to `totals.clones` plus `renamed.clones`, and each bystander's individual clones remain in the raw `jscpd` reports. Because the half-overlap rule is transitive, overlapping copies in one file can chain together or collapse a self-overlapping clone into one wide fragment; the agent inspects the code and splits those families.
 
 ## 5. Agent judgment and report
 
