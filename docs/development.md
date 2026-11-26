@@ -18,6 +18,14 @@ The suite has three files:
 
 CI runs the same command on every pull request and on pushes to `main`, on Node 22 (the minimum supported version) and on the current Node release. See [.github/workflows/test.yml](../.github/workflows/test.yml).
 
+### Fast feedback while you work
+
+The full suite takes a few minutes, and almost all of that time goes to `tests/cli.test.mjs`, because most of its tests run `jscpd`. While you change the script, run the smallest set of tests that covers the change, and run the full suite before you commit:
+
+- `node --test tests/clones.test.mjs` runs the pure-function tests in under a second. It also fails on a syntax error in `scripts/clones.mjs`, because it imports the script.
+- `node --test --test-name-pattern '<part of a test name>' tests/cli.test.mjs` reruns only the end-to-end tests whose names match. The fixture repository is still built first, so a single test takes a few seconds.
+- `node --test 'tests/*.test.mjs'` runs the full suite, as CI does.
+
 ## Running evals
 
 The evals measure how often the `Extract` or `Tolerate` ruling flips across repeated headless runs of the skill. Because each run invokes `claude -p` and costs tokens, the evals stay out of CI.

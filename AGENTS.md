@@ -14,7 +14,7 @@ How to work in this repo.
 
 - Branch from `main`. If the issue depends on another one, wait until that one is merged.
 - The issue's acceptance criteria are the definition of done.
-- Work test-first for any change to `scripts/clones.mjs`. Run `node --test 'tests/*.test.mjs'`.
+- Work test-first for any change to `scripts/clones.mjs`. While you iterate, run the smallest set of tests that covers the change (see [docs/development.md](docs/development.md#fast-feedback-while-you-work)). Run `node --test 'tests/*.test.mjs'` before you commit.
 - Before editing `SKILL.md`'s ruling or report format, or the evidence for touched `families`, read [docs/development.md#running-evals](docs/development.md#running-evals) to capture a baseline first.
 
 ## Agent skills
