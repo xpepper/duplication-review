@@ -198,6 +198,26 @@ test("classifyRun counts unparsable, multi-ruling, and failed runs as other", ()
   assert.match(nonZero.reason, /exited with 1/i);
 });
 
+test("classifyRun counts permission denials as other even when a ruling heading is present", () => {
+  const recovered = classifyRun(
+    jsonOutcome({
+      is_error: false,
+      result: "### priceItems: Extract\nRecovered after retrying with the absolute path.",
+      permission_denials: [
+        {
+          tool_name: "Bash",
+          tool_input: { command: "node .claude/skills/duplication-review-eval/scripts/clones.mjs" },
+        },
+      ],
+      modelUsage: { "claude-sonnet-5-5": { outputTokens: 150 } },
+    }),
+  );
+
+  assert.equal(recovered.ruling, "other");
+  assert.match(recovered.reason, /permission denied: Bash\(node \.claude\/skills\//);
+  assert.equal(recovered.model, "claude-sonnet-5-5");
+});
+
 test("tallyRuns counts Extract, Tolerate, and other and collects failures", () => {
   const row = tallyRuns({ name: "look-alike-test", expected: "Tolerate" }, [
     { ruling: "Tolerate", model: "claude-sonnet-4-6", reason: null },
