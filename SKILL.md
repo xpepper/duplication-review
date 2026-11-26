@@ -6,7 +6,7 @@ disable-model-invocation: true
 compatibility: Needs git and Node 22 or later (node, npx) to run the bundled script and jscpd; gh when given a PR number.
 metadata:
   author: Pietro Di Bello
-  version: "2.0.0"
+  version: "2.0.1"
 allowed-tools: Bash(git *) Bash(gh pr view *) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs *) Read
 ---
 
@@ -18,10 +18,10 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
 1. **Check out the change.** jscpd reads what is on disk, so the checkout must be the change under review. Given a PR number, compare its `headRefName` from `gh pr view <n> --json headRefName,baseRefName` with the current branch; if they differ, ask before checking it out.
 
-2. **Find the clones.** From the repo under review, run the bundled script, where `<skill-dir>` is the absolute path of this skill's base directory:
+2. **Find the clones.** From the repo under review, run the bundled script. Copy the exact absolute path of this skill's base directory verbatim into `<absolute-skill-dir>`. Do not shorten it to a relative path or `~`, because permission checks reject shortened paths:
 
    ```bash
-   node <skill-dir>/scripts/clones.mjs [--base origin/<baseRefName>]
+   node <absolute-skill-dir>/scripts/clones.mjs [--base origin/<baseRefName>]
    ```
 
    Pass `--base` for a PR; without it the script uses the remote's default branch. It diffs from the merge base (uncommitted and untracked files included), runs jscpd over the whole tree in the languages of the changed files, then once more with names normalized to find `renamed` clones, and prints JSON:

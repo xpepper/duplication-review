@@ -410,15 +410,16 @@ test("CLI prints the table, counts unparsable output under other, and exits 1", 
   assert.match(res.stderr, /Failed: 1 run\(s\) produced no parsable ruling/);
   assert.match(res.stderr, /copied-rule run 1: no parsable ruling heading \(got: No heading here\.\)/);
 
-  const argv = readFileSync(argsLog, "utf8").split("\n");
+  const argv = readFileSync(argsLog, "utf8").trimEnd().split("\n");
   assert.ok(argv.includes("--setting-sources"));
   assert.ok(argv.includes("--strict-mcp-config"));
   assert.ok(argv.includes("--no-session-persistence"));
-  assert.ok(argv.includes("--allowedTools"));
-  assert.ok(
-    argv.includes("Bash(node .claude/skills/duplication-review-eval/scripts/clones.mjs)"),
+  assert.equal(argv.includes("--allowedTools"), false);
+  assert.equal(
+    argv.some((arg) => arg.startsWith("Bash(")),
+    false,
   );
-  assert.ok(argv.includes("Read"));
+  assert.equal(argv.includes("Read"), false);
 });
 
 test("checkFixture reports family count, bystander, and clone-kind mismatches", () => {
