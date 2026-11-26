@@ -77,7 +77,7 @@ const other = (reason, model = null) => ({ ruling: "other", model, reason });
 
 /**
  * Classifies one headless claude invocation into Extract, Tolerate, or other
- * with a diagnostic reason when no single ruling could be parsed.
+ * with a diagnostic reason on errors, permission denials, or unparsable output.
  */
 export function classifyRun(outcome) {
   if (outcome.signal) return other(`claude terminated by ${outcome.signal}`);
@@ -99,12 +99,13 @@ export function classifyRun(outcome) {
     return other(`claude reported an error${message ? `: ${message}` : ""}`, model);
   }
 
+  const denials = Array.isArray(payload?.permission_denials) ? payload.permission_denials : [];
+  if (denials.length > 0) {
+    return other(`permission denied: ${denials.map(formatDenial).join(", ")}`, model);
+  }
+
   const rulings = parseRulings(payload?.result ?? "");
   if (rulings.length === 0) {
-    const denials = Array.isArray(payload?.permission_denials) ? payload.permission_denials : [];
-    if (denials.length > 0) {
-      return other(`permission denied: ${denials.map(formatDenial).join(", ")}`, model);
-    }
     const snippet = firstLine(payload?.result);
     return other(`no parsable ruling heading${snippet ? ` (got: ${snippet})` : ""}`, model);
   }
@@ -224,27 +225,10 @@ export function parseArgs(argv, fixtureNames) {
   return options;
 }
 
-function allowedToolsFor(cwd, skillDir, skillName) {
-  // SKILL.md's frontmatter allows the script via ${CLAUDE_SKILL_DIR} (an
-  // absolute path), so a relative path like `.claude/skills/...` is denied in
-  // non-interactive `-p` mode. Allow all three spellings of scripts/clones.mjs
-  // alongside git and Read so path spelling does not abort a ruling eval.
-  const relScript = `.claude/skills/${skillName}/scripts/clones.mjs`;
-  const scripts = new Set([
-    relScript,
-    join(cwd, relScript),
-    join(skillDir, "scripts", "clones.mjs"),
-  ]);
-  return [
-    ...[...scripts].flatMap((script) => [`Bash(node ${script})`, `Bash(node ${script} *)`]),
-    "Bash(git *)",
-    "Read",
-  ];
-}
-
-function invokeClaude(cwd, { model, skillDir, skillName }) {
+function invokeClaude(cwd, { model, skillName }) {
   // Isolate from user-level skills and MCP servers so the run tests this repo's
-  // SKILL.md cleanly and leaves no throwaway session behind.
+  // SKILL.md cleanly, including its allowed-tools frontmatter, and leaves no
+  // throwaway session behind.
   const run = spawnSync(
     "claude",
     [
@@ -254,8 +238,6 @@ function invokeClaude(cwd, { model, skillDir, skillName }) {
       "--no-session-persistence",
       "--setting-sources", "project",
       "--strict-mcp-config",
-      "--allowedTools",
-      ...allowedToolsFor(cwd, skillDir, skillName),
     ],
     { cwd, encoding: "utf8" },
   );
@@ -287,7 +269,7 @@ export function runEvals({
       const started = Date.now();
       let classified;
       try {
-        classified = classifyRun(invoke(dir, { model, skillDir, skillName }));
+        classified = classifyRun(invoke(dir, { model, skillName }));
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
