@@ -362,6 +362,7 @@ function jscpd(root, args) {
   if (run.signal || run.status !== 0 || /^Error:/m.test(output)) {
     throw new Failure(`jscpd failed:\n${output || `terminated by ${run.signal}`}`);
   }
+  return run.stdout;
 }
 
 function readReport(outDir, name) {
@@ -394,7 +395,8 @@ function readReport(outDir, name) {
 // literals or decorators, and an exact pair can then give way to normalized
 // ones, as the comment above RENAMED_SCAN explains. The summary would lose its
 // strongest evidence. Both clone scans set their own gap with --max-gap-lines,
-// and every jscpd call names its report with --report-name. Each flag overrides
+// and the format probe and both clone scans name their reports with
+// --report-name. Each flag overrides
 // the maxGapLines or reportName setting, but a file that spells one of them
 // both ways fails the scan with a duplicate field. jscpd 5.4.3 reads these
 // camelCase names from .jscpd.json, .config/jscpd.json, .config/.jscpd.json
@@ -487,7 +489,24 @@ function writeSanitizedConfig(config, outDir) {
   return ["--config", target];
 }
 
+/**
+ * Keeps the probed format names that `jscpd --list` names, sorted. The list
+ * output holds one name per line, so each line is trimmed and blank ones are
+ * ignored.
+ */
+export function filterSupportedFormats(probed, listOutput) {
+  const supported = new Set(
+    listOutput
+      .split("\n")
+      .map((name) => name.trim())
+      .filter(Boolean),
+  );
+  return probed.filter((name) => supported.has(name)).sort();
+}
+
 // jscpd takes format names, not extensions, so it names the changed files' formats itself.
+// Its statistics also name the languages of blocks inside a file, which
+// filterSupportedFormats screens out afterwards.
 function formatsOf(root, outDir, onDisk, configArgs) {
   jscpd(root, [
     ...onDisk,
@@ -496,7 +515,7 @@ function formatsOf(root, outDir, onDisk, configArgs) {
     "--reporters", "json", "--output", outDir, "--report-name", "changed-formats",
   ]);
   const { report } = readReport(outDir, "changed-formats");
-  return Object.keys(report.statistics.formats).sort();
+  return Object.keys(report.statistics.formats);
 }
 
 // The first scan finds exact clones, and similar ones that jscpd merges across a
@@ -526,6 +545,21 @@ function detect(root, outDir, formats, configArgs, name, flags) {
   return readReport(outDir, name);
 }
 
+// Runs a jscpd call that reads the sanitized config. jscpd's messages name the
+// sanitized config, which is not the file to fix, so a failure also names the
+// repository's own config.
+function withConfigSource(discovered, configArgs, run) {
+  try {
+    return run();
+  } catch (error) {
+    if (!discovered || !(error instanceof Failure)) throw error;
+    throw new Failure(
+      `${error.message.trimEnd()}\njscpd read these settings from ${discovered.source}, ` +
+        `copied to ${configArgs[1]} without the settings that would break or distort this review.`,
+    );
+  }
+}
+
 export function review({ cwd = process.cwd(), base: requested } = {}) {
   const root = tryGit(cwd, "rev-parse", "--show-toplevel");
   if (!root) throw new Failure("Not inside a git repository.");
@@ -540,20 +574,20 @@ export function review({ cwd = process.cwd(), base: requested } = {}) {
   const discovered = onDisk.length > 0 ? repoConfig(root) : null;
   const configArgs = discovered ? writeSanitizedConfig(discovered.config, outDir) : [];
 
-  let formats, detected, renamed;
-  try {
-    formats = onDisk.length > 0 ? formatsOf(root, outDir, onDisk, configArgs) : [];
-    if (formats.length > 0) {
+  let detected, renamed;
+  const probed = onDisk.length > 0 ? withConfigSource(discovered, configArgs, () => formatsOf(root, outDir, onDisk, configArgs)) : [];
+  // The probe's statistics name the languages of blocks inside a file, and
+  // --format rejects some of them: `text` for a plain Markdown code block,
+  // `html` for a Vue, Svelte or Astro template. A clone scan in the format of
+  // the file itself already covers those blocks, so only the formats that
+  // `jscpd --list` names are kept. The list does not read the repository's
+  // config, so it runs outside withConfigSource and without the sanitized config.
+  const formats = probed.length > 0 ? filterSupportedFormats(probed, jscpd(root, ["--list"])) : [];
+  if (formats.length > 0) {
+    withConfigSource(discovered, configArgs, () => {
       detected = detect(root, outDir, formats, configArgs, "jscpd-report", FIRST_SCAN);
       renamed = detect(root, outDir, formats, configArgs, "renamed-report", RENAMED_SCAN);
-    }
-  } catch (error) {
-    // jscpd's messages name the sanitized copy, which is not the file to fix.
-    if (!discovered || !(error instanceof Failure)) throw error;
-    throw new Failure(
-      `${error.message.trimEnd()}\njscpd read these settings from ${discovered.source}, ` +
-        `copied to ${configArgs[1]} without the settings that would break or distort this review.`,
-    );
+    });
   }
   return summarize(detected?.report ?? null, changed, {
     base,

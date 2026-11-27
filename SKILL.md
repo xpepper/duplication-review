@@ -6,7 +6,7 @@ disable-model-invocation: true
 compatibility: Needs git and Node 22 or later (node, npx) to run the bundled script and jscpd; gh when given a PR number.
 metadata:
   author: Pietro Di Bello
-  version: "2.0.1"
+  version: "2.0.2"
 allowed-tools: Bash(git *) Bash(gh pr view *) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs) Bash(node ${CLAUDE_SKILL_DIR}/scripts/clones.mjs *) Read
 ---
 
