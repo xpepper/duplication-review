@@ -362,6 +362,7 @@ function jscpd(root, args) {
   if (run.signal || run.status !== 0 || /^Error:/m.test(output)) {
     throw new Failure(`jscpd failed:\n${output || `terminated by ${run.signal}`}`);
   }
+  return run.stdout;
 }
 
 function readReport(outDir, name) {
@@ -487,7 +488,28 @@ function writeSanitizedConfig(config, outDir) {
   return ["--config", target];
 }
 
+/**
+ * Keeps the probed format names that `jscpd --list` names, sorted. The list
+ * output holds one name per line, so each line is trimmed and blank ones are
+ * ignored.
+ */
+export function filterSupportedFormats(probed, listOutput) {
+  const supported = new Set(
+    listOutput
+      .split("\n")
+      .map((name) => name.trim())
+      .filter(Boolean),
+  );
+  return probed.filter((name) => supported.has(name)).sort();
+}
+
 // jscpd takes format names, not extensions, so it names the changed files' formats itself.
+// Its statistics also name the languages of blocks inside a file, and --format
+// rejects some of them: `text` for a plain Markdown code block, `html` for a
+// Vue, Svelte or Astro template. A clone scan in the format of the file itself
+// already covers those blocks, so only the formats that `jscpd --list` names are
+// kept. That list does not depend on the repository's config, so the sanitized
+// config is not passed.
 function formatsOf(root, outDir, onDisk, configArgs) {
   jscpd(root, [
     ...onDisk,
@@ -496,7 +518,9 @@ function formatsOf(root, outDir, onDisk, configArgs) {
     "--reporters", "json", "--output", outDir, "--report-name", "changed-formats",
   ]);
   const { report } = readReport(outDir, "changed-formats");
-  return Object.keys(report.statistics.formats).sort();
+  const probed = Object.keys(report.statistics.formats);
+  if (probed.length === 0) return [];
+  return filterSupportedFormats(probed, jscpd(root, ["--list"]));
 }
 
 // The first scan finds exact clones, and similar ones that jscpd merges across a

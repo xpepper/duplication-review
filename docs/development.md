@@ -50,7 +50,8 @@ Options:
 The script pins `jscpd` to an exact version (`JSCPD_VERSION` in [scripts/clones.mjs](../scripts/clones.mjs)) so the same repository yields the same report over time. To bump it:
 
 1. Read the `jscpd` changelog between the two versions and check everything the script relies on:
-   - CLI flags: `--similarity`, `--max-gap-lines` (and that `--max-gap-lines 0` overrides a config's gap setting), `--ignore-identifiers=consistent`, `--kind`, and `--report-name`.
+   - CLI flags: `--similarity`, `--max-gap-lines` (and that `--max-gap-lines 0` overrides a config's gap setting), `--ignore-identifiers=consistent`, `--kind`, `--report-name`, and `--list` (it prints the names that `--format` accepts, one per line, and ignores the repository's config).
+    - That the probe's `statistics.formats` still names blocks inside a file, such as `text` and `html`, that `--format` rejects, that a clone scan in the format of the file itself still scans those blocks, and that `jscpd --list` still leaves those names out (see [jscpd-quirks.md](jscpd-quirks.md)).
    - That `jscpd`, with names normalized, pairs each copy with one anchor, which is why the renamed clones come from a second scan (see [jscpd-quirks.md](jscpd-quirks.md)).
    - Config auto-discovery order: `.jscpd.json`, `.config/jscpd.json`, `.config/.jscpd.json`, then the `jscpd` key in `package.json`.
    - Stripped config keys (`STRIPPED_CONFIG_KEYS`): `baseline`, `baselineFromRef`, `absolute`, `semantic`, `deadCode`, `kind`, `history`, `historySince`, `ignoreIdentifiers`, `ignoreLiterals`, `ignoreAnnotations`, `maxGapLines`, `reportName`, and the CI exit-code gates, in both camelCase and kebab-case spellings where `jscpd` reads them.

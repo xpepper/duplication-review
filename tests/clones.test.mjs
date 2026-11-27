@@ -4,7 +4,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { candidateFamilies, parseChangedRanges, readClones, repoConfig, summarize } from "../scripts/clones.mjs";
+import {
+  candidateFamilies,
+  filterSupportedFormats,
+  parseChangedRanges,
+  readClones,
+  repoConfig,
+  summarize,
+} from "../scripts/clones.mjs";
 
 const clone = (first, second, extra = {}) => ({
   format: "javascript",
@@ -640,6 +647,26 @@ test("totals count the first scan, and families and bystanders add the renamed c
     clonesIn(summary.families) + summary.bystanders.clones,
     summary.totals.clones + summary.renamed.clones,
   );
+});
+
+test("probed formats that jscpd --list does not name are dropped, and the rest come out sorted", () => {
+  assert.deepEqual(
+    filterSupportedFormats(["text", "vue", "html", "markdown"], "javascript\nmarkdown\nvue\n"),
+    ["markdown", "vue"],
+  );
+});
+
+test("whitespace and blank lines in the --list output do not change what is supported", () => {
+  assert.deepEqual(
+    filterSupportedFormats(["markdown", "", "vue"], "  markdown  \r\n\n   \n\tvue\t\n"),
+    ["markdown", "vue"],
+  );
+});
+
+test("no probed formats, or none that --list names, leave no formats", () => {
+  assert.deepEqual(filterSupportedFormats([], "markdown\nvue\n"), []);
+  assert.deepEqual(filterSupportedFormats(["text", "html"], "markdown\nvue\n"), []);
+  assert.deepEqual(filterSupportedFormats(["markdown"], "\n  \n"), []);
 });
 
 function tempDir(t) {

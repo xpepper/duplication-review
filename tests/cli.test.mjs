@@ -4,7 +4,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -287,6 +287,122 @@ test("only the languages of the changed files are scanned", () => {
   assert.deepEqual([...new Set(formats)], ["javascript"]);
   assert.equal(paths.some((path) => path.endsWith(".py")), false);
   assert.equal(summary.totals.clones, 2, "the Python clone is not counted");
+});
+
+// jscpd names a plain Markdown code block `text` and a Vue template `html` in
+// its statistics, but rejects both names as --format values.
+const embeddedBlocks = (ext) => {
+  const rows = Array.from({ length: 8 }, (_, i) => `row ${i}: node run.mjs --base main --out report-${i}.json`);
+  if (ext === "md") return `# Guide\n\n\`\`\`\n${rows.join("\n")}\n\`\`\`\n`;
+  const cells = rows.map((row) => `    <p class="r"><span>${row}</span></p>`).join("\n");
+  return `<template>\n  <div>\n${cells}\n  </div>\n</template>\n`;
+};
+
+for (const [label, ext, block, host] of [
+  ["plain Markdown code block", "md", "text", "markdown"],
+  ["Vue template", "vue", "html", "vue"],
+]) {
+  test(`a copied ${label} is found through the format of its file`, (t) => {
+    const content = embeddedBlocks(ext);
+    writeAll(t, { [`docs/a.${ext}`]: content, [`docs/b.${ext}`]: content });
+
+    const { status, stderr, summary } = run();
+
+    assert.equal(status, 0, stderr);
+    assert.ok(summary.formats.includes(host), summary.formats.join());
+    assert.ok(!summary.formats.includes(block), summary.formats.join());
+    assert.equal(clonesBetween(summary.families, "exact", [`docs/a.${ext}`, `docs/b.${ext}`])[0]?.format, block);
+  });
+}
+
+// A stand-in for npx that logs each call's arguments, one JSON array per line.
+// `behaviour` is the body of a function that gets `args` and may answer the
+// call itself; when it does not, the call goes to the real npx.
+function npxSpy(t, behaviour) {
+  const binDir = mkdtempSync(join(tmpdir(), "clones-npx-"));
+  t.after(() => rmSync(binDir, { recursive: true, force: true }));
+  const log = join(binDir, "calls.log");
+  const shim = join(binDir, "npx");
+  writeFileSync(
+    shim,
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.NPX_LOG, JSON.stringify(args) + "\\n");
+${behaviour}
+const real = spawnSync("npx", args, { env: { ...process.env, PATH: process.env.ORIG_PATH }, stdio: "inherit" });
+process.exit(real.status ?? 1);
+`,
+  );
+  chmodSync(shim, 0o755);
+  const env = { ...process.env, PATH: `${binDir}:${process.env.PATH}`, ORIG_PATH: process.env.PATH, NPX_LOG: log };
+  const calls = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : []);
+  return { env, calls };
+}
+
+const emptySummary = (changedFiles) => ({
+  jscpd: JSCPD_VERSION,
+  base,
+  changedFiles,
+  formats: [],
+  report: null,
+  totals: { clones: 0, duplicatedLines: 0, percentage: 0, kinds: ["exact", "similar"] },
+  renamed: { report: null, clones: 0 },
+  families: [],
+  bystanders: { count: 0, clones: 0, largest: [] },
+});
+
+const noCloneReports = () => [
+  existsSync(join(repo, ".git", "jscpd-out", "jscpd-report.json")),
+  existsSync(join(repo, ".git", "jscpd-out", "renamed-report.json")),
+];
+
+test("when the format probe finds no formats, jscpd --list is not run and the summary is empty", (t) => {
+  t.after(() => {
+    rmSync(join(repo, "data.xyz"), { force: true });
+    git("switch", "--quiet", "change");
+  });
+  git("switch", "--quiet", "main");
+  write("data.xyz", "not source code\n");
+  const { env, calls } = npxSpy(t, "");
+
+  const { status, stderr, summary } = run([], { env });
+
+  assert.equal(status, 0, stderr);
+  assert.deepEqual(summary, emptySummary(1));
+  assert.equal(calls().length, 1);
+  assert.ok(calls()[0].includes("changed-formats"));
+  assert.ok(calls().every((args) => !args.includes("--list")));
+  assert.deepEqual(noCloneReports(), [false, false]);
+});
+
+test("when no probed format is one that --list names, both clone scans are skipped and the summary is empty", (t) => {
+  const { env, calls } = npxSpy(
+    t,
+    `if (args.includes("--list")) {
+  process.stdout.write("markdown\\nvue\\n");
+  process.exit(0);
+}
+if (args.includes("changed-formats")) {
+  const outDir = args[args.indexOf("--output") + 1];
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(outDir + "/changed-formats.json", JSON.stringify({ duplicates: [], statistics: { formats: { text: {}, html: {} } } }));
+  process.exit(0);
+}
+process.stderr.write("unexpected clone scan\\n");
+process.exit(1);`,
+  );
+
+  const { status, stderr, summary } = run([], { env });
+
+  assert.equal(status, 0, stderr);
+  assert.deepEqual(summary, emptySummary(1));
+  assert.equal(calls().length, 2);
+  assert.ok(calls()[0].includes("changed-formats"));
+  assert.ok(calls()[1].includes("--list"));
+  assert.ok(!calls()[1].includes("--config"), "the list does not depend on the repository's config");
+  assert.deepEqual(noCloneReports(), [false, false]);
 });
 
 test("the report lands in the git directory and the working tree stays clean", () => {
