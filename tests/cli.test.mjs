@@ -228,6 +228,18 @@ before(() => {
 
 after(() => rmSync(repo, { recursive: true, force: true }));
 
+const emptySummary = (changedFiles) => ({
+  jscpd: JSCPD_VERSION,
+  base,
+  changedFiles,
+  formats: [],
+  report: null,
+  totals: { clones: 0, duplicatedLines: 0, percentage: 0, kinds: ["exact", "similar"] },
+  renamed: { report: null, clones: 0 },
+  families: [],
+  bystanders: { count: 0, clones: 0, largest: [] },
+});
+
 test("a branch with nothing changed reports nothing and scans nothing", (t) => {
   t.after(() => git("switch", "--quiet", "change"));
   git("switch", "--quiet", "main");
@@ -235,17 +247,7 @@ test("a branch with nothing changed reports nothing and scans nothing", (t) => {
   const { status, summary } = run();
 
   assert.equal(status, 0);
-  assert.deepEqual(summary, {
-    jscpd: summary.jscpd,
-    base,
-    changedFiles: 0,
-    formats: [],
-    report: null,
-    totals: { clones: 0, duplicatedLines: 0, percentage: 0, kinds: ["exact", "similar"] },
-    renamed: { report: null, clones: 0 },
-    families: [],
-    bystanders: { count: 0, clones: 0, largest: [] },
-  });
+  assert.deepEqual(summary, emptySummary(0));
 });
 
 test("the summary names the exact jscpd version it ran", () => {
@@ -315,43 +317,56 @@ for (const [label, ext, block, host] of [
   });
 }
 
-// A stand-in for npx that logs each call's arguments, one JSON array per line.
-// `behaviour` is the body of a function that gets `args` and may answer the
-// call itself; when it does not, the call goes to the real npx.
-function npxSpy(t, behaviour) {
+// A stand-in for npx that logs each call's arguments, one JSON array per line,
+// and answers some calls itself. Every other call goes to the real npx.
+//   probedFormats: the format names that the format probe reports
+//   supportedList: the output of `jscpd --list`
+//   failList:      the message with which `jscpd --list` fails
+//   failOnScan:    a clone scan fails instead of running
+const NPX_SHIM = `#!/usr/bin/env node
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+const config = JSON.parse(process.env.NPX_STUB_CONFIG);
+fs.appendFileSync(process.env.NPX_LOG, JSON.stringify(args) + "\\n");
+const answer = (stdout, stderr, status) => {
+  process.stdout.write(stdout);
+  process.stderr.write(stderr);
+  process.exit(status);
+};
+const isList = args.includes("--list");
+const isProbe = args.includes("changed-formats");
+if (isList && config.failList) answer("", config.failList + "\\n", 1);
+if (isList && config.supportedList !== undefined) answer(config.supportedList, "", 0);
+if (isProbe && config.probedFormats) {
+  const outDir = args[args.indexOf("--output") + 1];
+  const formats = Object.fromEntries(config.probedFormats.map((name) => [name, {}]));
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(outDir + "/changed-formats.json", JSON.stringify({ duplicates: [], statistics: { formats } }));
+  answer("", "", 0);
+}
+if (config.failOnScan && !isList && !isProbe) answer("", "unexpected clone scan\\n", 1);
+const real = spawnSync("npx", args, { env: { ...process.env, PATH: process.env.ORIG_PATH }, stdio: "inherit" });
+process.exit(real.status ?? 1);
+`;
+
+function npxSpy(t, stub = {}) {
   const binDir = mkdtempSync(join(tmpdir(), "clones-npx-"));
   t.after(() => rmSync(binDir, { recursive: true, force: true }));
   const log = join(binDir, "calls.log");
   const shim = join(binDir, "npx");
-  writeFileSync(
-    shim,
-    `#!/usr/bin/env node
-const fs = require("node:fs");
-const { spawnSync } = require("node:child_process");
-const args = process.argv.slice(2);
-fs.appendFileSync(process.env.NPX_LOG, JSON.stringify(args) + "\\n");
-${behaviour}
-const real = spawnSync("npx", args, { env: { ...process.env, PATH: process.env.ORIG_PATH }, stdio: "inherit" });
-process.exit(real.status ?? 1);
-`,
-  );
+  writeFileSync(shim, NPX_SHIM);
   chmodSync(shim, 0o755);
-  const env = { ...process.env, PATH: `${binDir}:${process.env.PATH}`, ORIG_PATH: process.env.PATH, NPX_LOG: log };
+  const env = {
+    ...process.env,
+    PATH: `${binDir}:${process.env.PATH}`,
+    ORIG_PATH: process.env.PATH,
+    NPX_LOG: log,
+    NPX_STUB_CONFIG: JSON.stringify(stub),
+  };
   const calls = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : []);
   return { env, calls };
 }
-
-const emptySummary = (changedFiles) => ({
-  jscpd: JSCPD_VERSION,
-  base,
-  changedFiles,
-  formats: [],
-  report: null,
-  totals: { clones: 0, duplicatedLines: 0, percentage: 0, kinds: ["exact", "similar"] },
-  renamed: { report: null, clones: 0 },
-  families: [],
-  bystanders: { count: 0, clones: 0, largest: [] },
-});
 
 const noCloneReports = () => [
   existsSync(join(repo, ".git", "jscpd-out", "jscpd-report.json")),
@@ -365,7 +380,7 @@ test("when the format probe finds no formats, jscpd --list is not run and the su
   });
   git("switch", "--quiet", "main");
   write("data.xyz", "not source code\n");
-  const { env, calls } = npxSpy(t, "");
+  const { env, calls } = npxSpy(t);
 
   const { status, stderr, summary } = run([], { env });
 
@@ -378,21 +393,11 @@ test("when the format probe finds no formats, jscpd --list is not run and the su
 });
 
 test("when no probed format is one that --list names, both clone scans are skipped and the summary is empty", (t) => {
-  const { env, calls } = npxSpy(
-    t,
-    `if (args.includes("--list")) {
-  process.stdout.write("markdown\\nvue\\n");
-  process.exit(0);
-}
-if (args.includes("changed-formats")) {
-  const outDir = args[args.indexOf("--output") + 1];
-  fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(outDir + "/changed-formats.json", JSON.stringify({ duplicates: [], statistics: { formats: { text: {}, html: {} } } }));
-  process.exit(0);
-}
-process.stderr.write("unexpected clone scan\\n");
-process.exit(1);`,
-  );
+  const { env, calls } = npxSpy(t, {
+    probedFormats: ["text", "html"],
+    supportedList: "markdown\nvue\n",
+    failOnScan: true,
+  });
 
   const { status, stderr, summary } = run([], { env });
 
@@ -403,6 +408,19 @@ process.exit(1);`,
   assert.ok(calls()[1].includes("--list"));
   assert.ok(!calls()[1].includes("--config"), "the list does not depend on the repository's config");
   assert.deepEqual(noCloneReports(), [false, false]);
+});
+
+test("a failure of jscpd --list does not blame the repository's config", (t) => {
+  t.after(() => rmSync(join(repo, ".jscpd.json"), { force: true }));
+  write(".jscpd.json", JSON.stringify({}));
+  const { env } = npxSpy(t, { probedFormats: ["javascript"], failList: "Error: list failed" });
+
+  const { status, stderr } = run([], { env });
+
+  assert.equal(status, 1);
+  assert.match(stderr, /list failed/);
+  assert.doesNotMatch(stderr, /\.jscpd\.json/);
+  assert.doesNotMatch(stderr, /config\.json/);
 });
 
 test("the report lands in the git directory and the working tree stays clean", () => {
