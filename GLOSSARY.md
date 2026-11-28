@@ -74,7 +74,7 @@ The judgment on one family: Extract or Tolerate.
 _Avoid_: decision, verdict
 
 **Extract**:
-The ruling that the fragments share one reason to change and the call sites read better with one shared element.
+The ruling that the fragments state one shared rule, extracting leaves each site's distinguishing intent visible, and the call sites read at least as clearly with one shared element.
 
 **Tolerate**:
-The ruling that the fragments look alike by accident, or differ in what they exist to show.
+The ruling that the fragments fail an Extract check: they lack one shared rule, extracting would hide a site's distinguishing intent, or the call sites would not read as clearly.
