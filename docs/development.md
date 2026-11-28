@@ -43,6 +43,7 @@ Options:
 - `--runs <N>`: runs per fixture (default `5`).
 - `--model <model>`: model alias or full ID passed to `claude --model` (default `sonnet`).
 - `--fixture <name>`: run only the named fixture (repeatable or comma-separated).
+- `--save-dir <dir>`: save each run's raw report into `<dir>` (do not commit saved outputs).
 - `--check-fixtures`: verify that every fixture produces one touched family, zero bystanders, and its expected clone kinds in `scripts/clones.mjs` without calling `claude`.
 
 ## Bumping jscpd

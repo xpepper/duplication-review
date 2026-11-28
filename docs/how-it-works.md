@@ -60,11 +60,17 @@ Families with at least one `touched` fragment go into `families` for the agent t
 
 ## 5. Agent judgment and report
 
-Starting from the JSON summary, the agent opens every fragment in `families` and asks of each group: *what element, had it existed, would have made this change easy?* It merges two families when one shared element would retire both, and splits a family when no single element fits all its fragments.
+Starting from the JSON summary, the agent opens every fragment in `families` and asks of each family: *what element, had it existed, would have made this change easy?* It merges two families when one shared element would retire both, and splits a family when no single element fits all its fragments.
 
-For each family, the agent rules **Extract** when the fragments share one reason to change and the call sites read better with the new element. It names the element in the repository's domain terms, proposes where it should live, lists the clones it retires, and estimates the lines after extraction. It rules **Tolerate** when the fragments match by accident or exist to show different intent (such as a test's distinguishing setup or config structs that will diverge), because fewer lines alone is no reason to extract.
+For each family, the agent sketches a candidate element first and answers three fixed checks before writing any report entry:
 
-The report prints **Extract** entries first, ordered by `duplicatedLines`, followed by **Tolerate** entries, the largest bystanders as follow-ups, and whole-repository totals. The raw `jscpd` reports stay at `<git-dir>/jscpd-out/jscpd-report.json` and `renamed-report.json` if the agent needs a detail omitted from the summary. Unless you ask for extractions, the agent leaves the working tree unchanged; when asked, it puts each extraction in its own refactor-only commit, runs the tests, and re-runs the script to confirm that the clones are gone.
+1. **`same rule`**: the fragments state one rule or fact where changing one without the others would be a bug (in tests, silently stopping a test from exercising a valid case). Matching domain logic and rule values in the same domain counts as evidence even when local names or incidental labels differ; signature changes, code shape, and hypothetical future copies do not count.
+2. **`intent visible`**: after reading the whole function or test around each fragment, the values and steps that distinguish each site or explain its expected result remain readable at the call site.
+3. **`call site clearer`**: call sites read at least as clearly with the element named (fewer lines alone is no reason to extract).
+
+The agent rules **Extract** only when all three checks answer `yes`, and **Tolerate** when any answers `no` (including uncertain or unsupported checks), with no conditional or hedged rulings.
+
+The report prints **Extract** entries first, ordered by `duplicatedLines`, followed by **Tolerate** entries, the largest bystanders as follow-ups, and whole-repository totals. Both `Extract` and `Tolerate` entries print a three-bullet `Checks:` block with `file:line` evidence and a `Clones:` list; `Extract` entries also name the element in the repository's domain terms, explain why it would have made the change easy, propose where it should live, and estimate the lines after extraction. The raw `jscpd` reports stay at `<git-dir>/jscpd-out/jscpd-report.json` and `renamed-report.json` if the agent needs a detail omitted from the summary. Unless you ask for extractions, the agent leaves the working tree unchanged; when asked, it puts each extraction in its own refactor-only commit, runs the tests, and re-runs the script to confirm that the clones are gone.
 
 ## Limits
 

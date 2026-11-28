@@ -2,7 +2,7 @@
 
 An agent skill that finds copy/paste clones touching a change and judges each group as a missing abstraction or acceptable repetition.
 
-For every group of clones that overlaps your diff, the agent opens the code and rules **Extract** (naming the missing element and estimating the lines saved) or **Tolerate** (stating why the repetition should stay). The review leaves your files untouched unless you ask the agent to extract.
+For every family of clones that touches your change, the agent opens the code, runs three fixed checks (`same rule`, `intent visible`, `call site clearer`), and rules **Extract** (naming the missing element and estimating the lines saved) or **Tolerate** (citing the failing check). The review leaves your files untouched unless you ask the agent to extract.
 
 ## Install
 
@@ -38,8 +38,14 @@ Each family in the report looks like this:
 
 ```markdown
 ### calculateOrderTotal: Extract
+Checks:
+- same rule: yes (subtotal, tax, and shipping calculation, src/invoice.js:1-12, src/order.js:1-12)
+- intent visible: yes (nothing distinguishes the fragments; whole fragment is the rule, src/order.js:1-12)
+- call site clearer: yes (`calculateOrderTotal(items, taxRate)` replaces src/order.js:1-12)
+
 Would have made this change easy because: invoice and order totals share the same subtotal, tax, and shipping rules.
 Lives in: src/pricing.js · Lines: 24 now, about 14 after (estimate)
+Clones:
 - src/invoice.js:1-12 <> src/order.js:1-12 (introduced)
 ```
 
@@ -74,7 +80,7 @@ flowchart TD
 
 The script scans the whole repository, not just the diff, so it catches new code copied from existing files. It runs [jscpd](https://github.com/kucherenko/jscpd) only in the languages of the changed files, finds copies whose names changed (by syntax tree, and by a second scan with names normalized), honors the repository's own ignore rules and minimum clone sizes, and prints a JSON summary.
 
-The agent opens every fragment in the touched families, merges two families when one element would retire both, or splits one when no single element fits all its fragments. It then rules **Extract** or **Tolerate** on each family and lists the largest untouched families as follow-ups.
+The agent opens every fragment in the touched families, merges two families when one element would retire both, or splits one when no single element fits all its fragments. It then runs the three checks to rule **Extract** or **Tolerate** on each family and lists the largest bystanders as follow-ups.
 
 Read [How it works](docs/how-it-works.md) for the details on diff scoping, config handling, clone origins, family grouping, and limits.
 
