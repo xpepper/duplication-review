@@ -209,7 +209,7 @@ export function parseArgs(argv, fixtureNames) {
     }
     if (arg === "--save-dir") {
       const value = argv[++i];
-      if (!value) throw new Failure("Missing value for --save-dir.");
+      if (!value || value.startsWith("-")) throw new Failure("Missing value for --save-dir.");
       options.saveDir = value;
       continue;
     }

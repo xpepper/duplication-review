@@ -291,6 +291,14 @@ test("parseArgs rejects invalid --runs, unknown fixtures, missing --save-dir, an
   assert.throws(() => parseArgs(["--fixture", ","], names), /Missing value for --fixture/);
   assert.throws(() => parseArgs(["--fixture", "missing"], names), /Unknown fixture 'missing'/);
   assert.throws(() => parseArgs(["--save-dir"], names), /Missing value for --save-dir/);
+  assert.throws(
+    () => parseArgs(["--save-dir", "--check-fixtures"], names),
+    /Missing value for --save-dir/,
+  );
+  assert.throws(
+    () => parseArgs(["--save-dir", "--help"], names),
+    /Missing value for --save-dir/,
+  );
   assert.throws(() => parseArgs(["--bogus"], names), /Unknown or incomplete option/);
 });
 
