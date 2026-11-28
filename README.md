@@ -42,6 +42,7 @@ Checks:
 - same rule: yes (subtotal, tax, and shipping calculation, src/invoice.js:1-12, src/order.js:1-12)
 - intent visible: yes (nothing distinguishes the fragments; whole fragment is the rule, src/order.js:1-12)
 - call site clearer: yes (`calculateOrderTotal(items, taxRate)` replaces src/order.js:1-12)
+
 Would have made this change easy because: invoice and order totals share the same subtotal, tax, and shipping rules.
 Lives in: src/pricing.js · Lines: 24 now, about 14 after (estimate)
 Clones:

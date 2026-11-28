@@ -48,6 +48,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    - same rule: yes (<rule>, <file:line>, <file:line>)
    - intent visible: yes (<distinguishing step or assertion>, <file:line>)
    - call site clearer: yes (`<proposed call>` replaces <file:line>)
+
    Would have made this change easy because: <one line>
    Lives in: <path> · Lines: <duplicatedLines> now, about <after> after (estimate)
    Clones:
@@ -58,6 +59,7 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
    - same rule: yes | no (<evidence>)
    - intent visible: yes | no (<evidence>)
    - call site clearer: yes | no (<evidence>)
+
    Clones:
    - file:lines <> file:lines (<origin>)
    ```
@@ -71,6 +73,4 @@ Duplicated code is often a hint of a missing abstraction. Find the clones a chan
 
 ## Reading the numbers
 
-jscpd flags repeated shape. Setup boilerplate in tests and field lists in config structs are the usual token hits. A clone of `kind` `similar` has one of two `method`s. An `ast` clone is a structural match that ignores local names and literals (test files are left out of that matching), so a `similarity` of 1.0 says the structure matches, not the meaning. A `gap` clone joins token clones that jscpd merged across a short run of lines that differ. Names and literals count there, and test files are included. The copies diverge around that gap, but the matched lines can differ too, so read both fragments in full before deciding what a shared element would take as a parameter. A `renamed` clone matches token for token once names are normalized: each name on one side stands for one name on the other, while literals must match. The second scan finds such clones in test files and outside functions too, so copied setup shows up there. Run the three checks in step 3 on each family.
-
-jscpd cannot see the same intent written differently, or helpers under 5 lines. No clone is not proof that no similar code exists.
+jscpd flags repeated shape. Setup boilerplate in tests and field lists in config structs are the usual token hits. A clone of `kind` `similar` has one of two `method`s. An `ast` clone is a structural match that ignores local names and literals (test files are left out of that matching), so a `similarity` of 1.0 says the structure matches, not the meaning. A `gap` clone joins token clones that jscpd merged across a short run of lines that differ. Names and literals count there, and test files are included. The copies diverge around that gap, but the matched lines can differ too, so read both fragments in full before deciding what a shared element would take as a parameter. A `renamed` clone matches token for token once names are normalized: each name on one side stands for one name on the other, while literals must match. The second scan finds such clones in test files and outside functions too, so copied setup shows up there. Run the three checks in step 3 on each family. jscpd cannot see the same intent written differently, or helpers under 5 lines. No clone is not proof that no similar code exists.
