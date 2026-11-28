@@ -4,7 +4,7 @@
 // and prints a summary table. Kept out of CI because each run costs tokens.
 
 import { spawnSync } from "node:child_process";
-import { realpathSync, rmSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -166,6 +166,7 @@ Options:
   --runs <N>         Runs per fixture (default: ${DEFAULT_RUNS})
   --model <model>    Model passed to claude --model (default: ${DEFAULT_MODEL})
   --fixture <name>   Run only the named fixture (repeatable or comma-separated)
+  --save-dir <dir>   Save each run's raw report into <dir>
   --check-fixtures   Verify fixtures with scripts/clones.mjs without calling claude
   -h, --help         Show this help`;
 
@@ -177,6 +178,7 @@ export function parseArgs(argv, fixtureNames) {
     runs: DEFAULT_RUNS,
     model: DEFAULT_MODEL,
     fixtures: [...fixtureNames],
+    saveDir: null,
     checkFixtures: false,
     help: false,
   };
@@ -203,6 +205,12 @@ export function parseArgs(argv, fixtureNames) {
       const value = argv[++i];
       if (!value) throw new Failure("Missing value for --model.");
       options.model = value;
+      continue;
+    }
+    if (arg === "--save-dir") {
+      const value = argv[++i];
+      if (!value) throw new Failure("Missing value for --save-dir.");
+      options.saveDir = value;
       continue;
     }
     if (arg === "--fixture") {
@@ -245,6 +253,16 @@ function invokeClaude(cwd, { model, skillName }) {
   return run;
 }
 
+function extractRawReport(outcome) {
+  try {
+    const payload = JSON.parse(outcome.stdout);
+    if (typeof payload?.result === "string") return payload.result;
+  } catch {
+    // Fall back to raw output when claude did not return JSON.
+  }
+  return `${outcome.stdout ?? ""}${outcome.stderr ?? ""}`;
+}
+
 /**
  * Runs each fixture `runs` times in a fresh throwaway git repo, returning the
  * tallied rows, resolved model IDs, and any unparsable-run failures.
@@ -253,6 +271,7 @@ export function runEvals({
   fixtures,
   runs,
   model,
+  saveDir = null,
   skillDir = SKILL_DIR,
   skillName = SKILL_NAME,
   invoke = invokeClaude,
@@ -262,16 +281,23 @@ export function runEvals({
   const failures = [];
   const models = new Set();
 
+  if (saveDir) mkdirSync(saveDir, { recursive: true });
+
   for (const fixture of fixtures) {
     const outcomes = [];
     for (let run = 1; run <= runs; run++) {
       const dir = createFixtureRepo(fixture, { skillDir, skillName });
       const started = Date.now();
+      let outcome;
       let classified;
       try {
-        classified = classifyRun(invoke(dir, { model, skillName }));
+        outcome = invoke(dir, { model, skillName });
+        classified = classifyRun(outcome);
       } finally {
         rmSync(dir, { recursive: true, force: true });
+      }
+      if (saveDir) {
+        writeFileSync(join(saveDir, `${fixture.name}-run-${run}.md`), extractRawReport(outcome));
       }
       if (classified.model) models.add(classified.model);
       outcomes.push(classified);
@@ -366,6 +392,7 @@ function main(argv) {
     fixtures: selected,
     runs: options.runs,
     model: options.model,
+    saveDir: options.saveDir,
     onProgress: ({ fixture, run, runs, ruling, reason, seconds }) => {
       const detail = reason ? ` (${reason})` : "";
       console.error(`[${run}/${runs}] ${fixture}: ${ruling}${detail} [${seconds.toFixed(1)}s]`);

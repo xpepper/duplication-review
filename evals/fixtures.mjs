@@ -182,6 +182,142 @@ const OVERTIME_MODULE = `export function summarizeOvertime(timesheets, standardH
 }
 `;
 
+const MERCHANT_POLICY_MODULE = `const ACTIVE_TERMS_VERSION = "2026-04";
+
+export function isEligibleMerchant(merchant) {
+  return (
+    merchant.status === "active" &&
+    merchant.kycTier === "tier2" &&
+    merchant.termsVersion === ACTIVE_TERMS_VERSION &&
+    merchant.sanctionsStatus === "cleared" &&
+    merchant.mfaEnrolled === true &&
+    merchant.settlementCurrency === "EUR" &&
+    merchant.ibanVerified === true &&
+    merchant.riskBand === "low" &&
+    merchant.taxIdVerified === true &&
+    merchant.beneficialOwnersVerified === true &&
+    merchant.payoutHold === false &&
+    merchant.chargebackRatioBps <= 100
+  );
+}
+
+export function canRequestPayout(merchant, amountCents) {
+  if (!isEligibleMerchant(merchant)) return false;
+  return amountCents >= 1000;
+}
+
+export function canIssueInstantTransfer(merchant, amountCents, dailyUsedCents) {
+  if (!isEligibleMerchant(merchant)) return false;
+  return dailyUsedCents + amountCents <= 250000;
+}
+`;
+
+const PAYOUT_MINIMUM_TEST = `import { test } from "node:test";
+import assert from "node:assert/strict";
+import { canRequestPayout } from "../src/merchant-policy.js";
+
+test("rejects payouts below the 10 EUR minimum", () => {
+  const merchant = {
+    status: "active",
+    kycTier: "tier2",
+    termsVersion: "2026-04",
+    sanctionsStatus: "cleared",
+    mfaEnrolled: true,
+    settlementCurrency: "EUR",
+    ibanVerified: true,
+    riskBand: "low",
+    taxIdVerified: true,
+    beneficialOwnersVerified: true,
+    payoutHold: false,
+    chargebackRatioBps: 20,
+  };
+
+  assert.equal(canRequestPayout(merchant, 999), false);
+});
+`;
+
+const DAILY_LIMIT_TEST = `import { test } from "node:test";
+import assert from "node:assert/strict";
+import { canIssueInstantTransfer } from "../src/merchant-policy.js";
+
+test("rejects instant transfers over the 2500 EUR daily cap", () => {
+  const merchant = {
+    status: "active",
+    kycTier: "tier2",
+    termsVersion: "2026-04",
+    sanctionsStatus: "cleared",
+    mfaEnrolled: true,
+    settlementCurrency: "EUR",
+    ibanVerified: true,
+    riskBand: "low",
+    taxIdVerified: true,
+    beneficialOwnersVerified: true,
+    payoutHold: false,
+    chargebackRatioBps: 20,
+  };
+
+  assert.equal(canIssueInstantTransfer(merchant, 60000, 200000), false);
+});
+`;
+
+const WEB_CANCELLATION_MODULE = `export function calculateWebCancellation(reservation, hoursBeforeStart) {
+  if (reservation.paidCents <= 0) {
+    throw new Error("web cancellation requires positive paidCents");
+  }
+  if (hoursBeforeStart < 0) {
+    throw new Error("web cancellation requires non-negative hoursBeforeStart");
+  }
+  let refundRatio = 0;
+  let auditTag = "web:no-refund";
+  if (hoursBeforeStart >= 48) {
+    refundRatio = 1;
+    auditTag = "web:full-refund";
+  } else if (hoursBeforeStart >= 24) {
+    refundRatio = 0.5;
+    auditTag = "web:half-refund";
+  }
+  const grossRefund = Math.round(reservation.paidCents * refundRatio);
+  const processingFee = grossRefund > 0 ? Math.min(grossRefund, 1500) : 0;
+  const netRefund = grossRefund - processingFee;
+  return {
+    channel: "web-portal",
+    auditTag,
+    refundCents: netRefund,
+    retainedCents: reservation.paidCents - netRefund,
+    feeCents: processingFee,
+  };
+}
+`;
+
+const AGENT_CANCELLATION_MODULE = `export function computeAgentCancellation(booking, hoursUntilCheckIn) {
+  if (booking.paidCents <= 0) {
+    throw new Error("agent cancellation requires positive paidCents");
+  }
+  if (hoursUntilCheckIn < 0) {
+    throw new Error("agent cancellation requires non-negative hoursUntilCheckIn");
+  }
+  let refundRate = 0;
+  let reasonCode = "agent:no-refund";
+  if (hoursUntilCheckIn >= 48) {
+    refundRate = 1;
+    reasonCode = "agent:full-refund";
+  } else if (hoursUntilCheckIn >= 24) {
+    refundRate = 0.5;
+    reasonCode = "agent:half-refund";
+  }
+  const rawRefund = Math.round(booking.paidCents * refundRate);
+  const handlingFee = rawRefund > 0 ? Math.min(rawRefund, 1500) : 0;
+  const finalRefund = rawRefund - handlingFee;
+  return {
+    channel: "support-agent",
+    auditTag: reasonCode,
+    refundCents: finalRefund,
+    retainedCents: booking.paidCents - finalRefund,
+    feeCents: handlingFee,
+  };
+}
+`;
+
 export const FIXTURES = [
   // Expected: Extract.
   // Clear copy of one business rule (quantity check, tax, free-shipping
@@ -257,6 +393,47 @@ export const FIXTURES = [
     },
     changeFiles: {
       "src/payroll/overtime.js": OVERTIME_MODULE,
+    },
+  },
+
+  // Expected: Extract.
+  // Two test files repeating a 12-field compliant merchant literal required by
+  // isEligibleMerchant, unrelated to each test's distinguishing threshold
+  // inputs (999 cents payout minimum vs 60000+200000 daily transfer cap). If
+  // the eligibility invariant changes in one test and not the other, the stale
+  // rejection test still returns false for the wrong reason and silently stops
+  // exercising the limit under test. A shared test factory hides only the
+  // eligibility invariant while keeping each test's distinguishing inputs
+  // explicit at the call site.
+  {
+    name: "shared-test-invariant",
+    expected: "Extract",
+    expectedClones: ["exact"],
+    baseFiles: {
+      "src/merchant-policy.js": MERCHANT_POLICY_MODULE,
+      "tests/payout-minimum.test.js": PAYOUT_MINIMUM_TEST,
+    },
+    changeFiles: {
+      "tests/daily-limit.test.js": DAILY_LIMIT_TEST,
+    },
+  },
+
+  // Expected: Extract.
+  // Structural (ast) clone between two cancellation entry points in the same
+  // bookings domain (web portal and support agent) enforcing one refund policy
+  // with identical rule literals (48h, 24h, 0.5, 1500 cents fee cap), varying
+  // only identifiers and incidental channel labels. Changing a refund tier or
+  // fee cap in one without the other would give customers different refunds by
+  // channel, and a shared refund helper keeps each channel wrapper concise.
+  {
+    name: "ast-shared-rule",
+    expected: "Extract",
+    expectedClones: ["similar/ast"],
+    baseFiles: {
+      "src/bookings/web-cancellation.js": WEB_CANCELLATION_MODULE,
+    },
+    changeFiles: {
+      "src/bookings/agent-cancellation.js": AGENT_CANCELLATION_MODULE,
     },
   },
 ];

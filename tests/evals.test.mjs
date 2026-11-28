@@ -251,22 +251,27 @@ test("formatTable aligns columns cleanly with no trailing spaces", () => {
   );
 });
 
-test("parseArgs applies defaults and parses --runs, --model, --fixture, --check-fixtures", () => {
+test("parseArgs applies defaults and parses --runs, --model, --fixture, --save-dir, --check-fixtures", () => {
   const names = ["copied-rule", "look-alike-test"];
   assert.deepEqual(parseArgs([], names), {
     runs: 5,
     model: "sonnet",
     fixtures: names,
+    saveDir: null,
     checkFixtures: false,
     help: false,
   });
 
   assert.deepEqual(
-    parseArgs(["--runs", "3", "--model", "opus", "--fixture", "look-alike-test"], names),
+    parseArgs(
+      ["--runs", "3", "--model", "opus", "--fixture", "look-alike-test", "--save-dir", "/tmp/evals"],
+      names,
+    ),
     {
       runs: 3,
       model: "opus",
       fixtures: ["look-alike-test"],
+      saveDir: "/tmp/evals",
       checkFixtures: false,
       help: false,
     },
@@ -277,7 +282,7 @@ test("parseArgs applies defaults and parses --runs, --model, --fixture, --check-
   assert.equal(parseArgs(["--help"], names).help, true);
 });
 
-test("parseArgs rejects invalid --runs, unknown fixtures, and unknown flags", () => {
+test("parseArgs rejects invalid --runs, unknown fixtures, missing --save-dir, and unknown flags", () => {
   const names = ["copied-rule"];
   assert.throws(() => parseArgs(["--runs", "0"], names), /positive integer/);
   assert.throws(() => parseArgs(["--runs", "1.5"], names), /positive integer/);
@@ -285,6 +290,7 @@ test("parseArgs rejects invalid --runs, unknown fixtures, and unknown flags", ()
   assert.throws(() => parseArgs(["--runs"], names), /positive integer|incomplete/);
   assert.throws(() => parseArgs(["--fixture", ","], names), /Missing value for --fixture/);
   assert.throws(() => parseArgs(["--fixture", "missing"], names), /Unknown fixture 'missing'/);
+  assert.throws(() => parseArgs(["--save-dir"], names), /Missing value for --save-dir/);
   assert.throws(() => parseArgs(["--bogus"], names), /Unknown or incomplete option/);
 });
 
@@ -397,6 +403,47 @@ test("runEvals counts unparsable runs under other, reports failures, and removes
   assert.equal(existsSync(seenDirs[1]), false);
 });
 
+test("runEvals writes raw reports into saveDir without altering scoring", (t) => {
+  const parent = mkdtempSync(join(tmpdir(), "eval-save-dir-"));
+  const saveDir = join(parent, "nested", "reports");
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+
+  const reports = [
+    jsonOutcome({
+      is_error: false,
+      result: "### priceItems: Extract\nFirst report body.",
+      modelUsage: { "claude-sonnet-4-6": {} },
+    }),
+    {
+      status: 1,
+      signal: null,
+      stdout: "",
+      stderr: "network error",
+    },
+  ];
+  let call = 0;
+  const result = runEvals({
+    fixtures: [FIXTURES[0]],
+    runs: 2,
+    model: "sonnet",
+    skillDir: REPO_ROOT,
+    saveDir,
+    invoke: () => reports[call++],
+    onProgress: () => {},
+  });
+
+  assert.equal(result.rows[0].Extract, 1);
+  assert.equal(result.rows[0].other, 1);
+  assert.equal(
+    readFileSync(join(saveDir, `${FIXTURES[0].name}-run-1.md`), "utf8"),
+    "### priceItems: Extract\nFirst report body.",
+  );
+  assert.equal(
+    readFileSync(join(saveDir, `${FIXTURES[0].name}-run-2.md`), "utf8"),
+    "network error",
+  );
+});
+
 test("CLI prints the table, counts unparsable output under other, and exits 1", (t) => {
   const binDir = mkdtempSync(join(tmpdir(), "eval-fake-claude-"));
   t.after(() => rmSync(binDir, { recursive: true, force: true }));
@@ -414,9 +461,10 @@ test("CLI prints the table, counts unparsable output under other, and exits 1", 
   chmodSync(fakeClaude, 0o755);
 
   const script = join(REPO_ROOT, "evals", "run.mjs");
+  const saveDir = join(binDir, "saved");
   const res = spawnSync(
     "node",
-    [script, "--runs", "1", "--model", "sonnet", "--fixture", "copied-rule"],
+    [script, "--runs", "1", "--model", "sonnet", "--fixture", "copied-rule", "--save-dir", saveDir],
     {
       cwd: REPO_ROOT,
       env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
@@ -429,6 +477,7 @@ test("CLI prints the table, counts unparsable output under other, and exits 1", 
   assert.match(res.stdout, /copied-rule\s+Extract\s+0\s+0\s+1/);
   assert.match(res.stderr, /Failed: 1 run\(s\) produced no parsable ruling/);
   assert.match(res.stderr, /copied-rule run 1: no parsable ruling heading \(got: No heading here\.\)/);
+  assert.equal(readFileSync(join(saveDir, "copied-rule-run-1.md"), "utf8"), "No heading here.");
 
   const argv = readFileSync(argsLog, "utf8").trimEnd().split("\n");
   assert.ok(argv.includes("--setting-sources"));
